@@ -73,7 +73,11 @@ class Radosbench(Benchmark):
 
         if self.concurrent_ops:
             concurrent_ops_str = '--concurrent-ios %s' % self.concurrent_ops
-        op_size_str = '-b %s' % self.op_size
+        if mode in ['write']:
+            op_size_str = '-b %s' % self.op_size
+        else:
+            op_size_str = ''
+            
 
         common.make_remote_dir(run_dir)
 
