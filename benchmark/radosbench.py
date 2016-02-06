@@ -30,6 +30,7 @@ class Radosbench(Benchmark):
         self.out_dir = '%s/osd_ra-%08d/op_size-%08d/concurrent_ops-%08d' % (self.archive_dir, int(self.osd_ra), int(self.op_size), int(self.concurrent_ops))
         self.pool_profile = config.get('pool_profile', 'default')
         self.cmd_path = config.get('cmd_path', '/usr/bin/rados')
+        self.readmode = config.get('readmode', 'seq')
 
     def exists(self):
         if os.path.exists(self.out_dir):
@@ -65,7 +66,8 @@ class Radosbench(Benchmark):
         self._run('write', '%s/write' % self.run_dir, '%s/write' % self.out_dir)
         # Run read test unless write_only
         if self.write_only: return
-        self._run('seq', '%s/seq' % self.run_dir, '%s/seq' % self.out_dir)
+        self._run(self.readmode, '%s/%s' % (self.run_dir, self.readmode), '%s/%s' % (self.out_dir, self.readmode))
+        
 
     def _run(self, mode, run_dir, out_dir):
         # We'll always drop caches for rados bench
@@ -77,7 +79,7 @@ class Radosbench(Benchmark):
             op_size_str = '-b %s' % self.op_size
         else:
             op_size_str = ''
-            
+
 
         common.make_remote_dir(run_dir)
 
@@ -102,10 +104,14 @@ class Radosbench(Benchmark):
             if self.pool_per_proc: # support previous behavior of 1 storage pool per rados process
                 pool_name = 'rados-bench-`hostname -s`-%s'%i
                 run_name = ''
+            runtime=int(self.time)
+            if mode in ['write']:
+                runtime *= 10
             rados_bench_cmd = '%s -c %s -p %s bench %s %s %s %s %s --no-cleanup 2> %s > %s' % \
-                 (self.cmd_path_full, self.tmp_conf, pool_name, op_size_str, self.time, mode, concurrent_ops_str, run_name, objecter_log, out_file)
+                 (self.cmd_path_full, self.tmp_conf, pool_name, op_size_str, runtime, mode, concurrent_ops_str, run_name, objecter_log, out_file)
             p = common.pdsh(settings.getnodes('clients'), rados_bench_cmd)
             ps.append(p)
+            time.sleep(0.1)  # added this to avoid server connection problems
         for p in ps:
             p.wait()
         monitoring.stop(run_dir)
