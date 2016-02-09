@@ -135,6 +135,18 @@ class Cosbench(Benchmark):
         if not self.config["template"]:
             self.config["template"] = "default"
         self.config["workload"] = self.choose_template("default", conf)
+
+        # hack to add a "prepare" stage if mode is read
+        if "read" in self.mode:
+            workstage_prepare= { "name":"prepare",
+                                 "work": {
+                "type":"prepare",
+                "workers":conf["workers"],
+                "config":"containers=r(1,%s);objects=r(1,%s);cprefix=%s-%s;sizes=c(%s)%s" % 
+                (conf["containers_max"], conf["objects_max"], conf["obj_size"], conf["mode"], conf["obj_size_num"], conf["obj_size_unit"])
+             }}
+            self.config["workload"]["workflow"]["workstage"].insert(1, workstage_prepare)
+
         self.prepare_xml(self.config["workload"])
         return True
 
