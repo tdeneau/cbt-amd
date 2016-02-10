@@ -110,11 +110,8 @@ class Radosbench(Benchmark):
             if self.pool_per_proc: # support previous behavior of 1 storage pool per rados process
                 pool_name = 'rados-bench-`hostname -s`-%s'%i
                 run_name = ''
-            runtime=int(self.time)
-            if mode in ['write']:
-                runtime *= 10
             rados_bench_cmd = '%s -c %s -p %s bench %s %s %s %s %s --no-cleanup 2> %s > %s' % \
-                 (self.cmd_path_full, self.tmp_conf, pool_name, op_size_str, runtime, mode, concurrent_ops_str, run_name, objecter_log, out_file)
+                 (self.cmd_path_full, self.tmp_conf, pool_name, op_size_str, self.time, mode, concurrent_ops_str, run_name, objecter_log, out_file)
             p = common.pdsh(settings.getnodes('clients'), rados_bench_cmd)
             ps.append(p)
             time.sleep(0.1)  # added this to avoid server connection problems
