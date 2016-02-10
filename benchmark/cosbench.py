@@ -77,11 +77,11 @@ class Cosbench(Benchmark):
                     },{
                         "name": "main",
                         "work": {"rampup":conf["rampup"], "rampdown":conf["rampdown"], "name":conf["obj_size"], "workers":conf["workers"], "runtime":conf["runtime"],
-                            "operation": {
+                            "operation":[ {
                                 "config":"containers=%s;objects=%s;cprefix=%s-%s;sizes=c(%s)%s" % (conf["containers"], conf["objects"], conf["obj_size"], conf["mode"], conf["obj_size_num"], conf["obj_size_unit"]),
                                 "ratio":conf["ratio"],
-                                "type":conf["mode"]
-                            }
+                                "type":("read" if conf["mode"] == "mix" else conf["mode"])
+                            }]
                         }
                     }]
                 }
@@ -136,8 +136,8 @@ class Cosbench(Benchmark):
             self.config["template"] = "default"
         self.config["workload"] = self.choose_template("default", conf)
 
-        # hack to add a "prepare" stage if mode is read
-        if "read" in self.mode:
+        # add a "prepare" stage if mode is read or mix
+        if (self.mode != "write"):
             workstage_prepare= { "name":"prepare",
                                  "work": {
                 "type":"prepare",
@@ -146,6 +146,17 @@ class Cosbench(Benchmark):
                 (conf["containers_max"], conf["objects_max"], conf["obj_size"], conf["mode"], conf["obj_size_num"], conf["obj_size_unit"])
              }}
             self.config["workload"]["workflow"]["workstage"].insert(1, workstage_prepare)
+
+        # add a second (write)operation if mode is "mix"
+        # parameters same as for read except ratio = 100 - read_ratio
+        if (self.mode == "mix"):
+            operation_write = {
+               "config":"containers=%s;objects=%s;cprefix=%s-%s;sizes=c(%s)%s"
+                %(conf["containers"], conf["objects"], conf["obj_size"], conf["mode"], conf["obj_size_num"], conf["obj_size_unit"]),
+                "ratio":(100 - conf["ratio"]),
+                "type":"write"
+            }
+            self.config["workload"]["workflow"]["workstage"][2]["work"]["operation"].append(operation_write)
 
         self.prepare_xml(self.config["workload"])
         return True

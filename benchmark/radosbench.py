@@ -6,6 +6,7 @@ import os
 import time
 import threading
 import logging
+import re
 
 from cluster.ceph import Ceph
 from benchmark import Benchmark
@@ -75,7 +76,12 @@ class Radosbench(Benchmark):
 
         if self.concurrent_ops:
             concurrent_ops_str = '--concurrent-ios %s' % self.concurrent_ops
-        if mode in ['write']:
+        #determine rados version    
+        rados_version_str = subprocess.check_output(["rados", "-v"])
+        m = re.findall("version (\d+)", rados_version_str)
+        rados_version = int(m[0])
+
+        if mode in ['write'] or rados_version < 9:
             op_size_str = '-b %s' % self.op_size
         else:
             op_size_str = ''
