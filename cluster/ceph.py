@@ -194,6 +194,9 @@ class Ceph(Cluster):
         common.pdsh(nodes, 'sudo rm -rf %s' % self.tmp_dir).communicate()
 
     def setup_fs(self):
+        use_existing = settings.cluster.get('use_existing', True)
+        if use_existing:
+            return None
         sc = settings.cluster
         fs = sc.get('fs')
         mkfs_opts = sc.get('mkfs_opts', '')
@@ -487,13 +490,13 @@ class Ceph(Cluster):
         else:
             common.pdsh(settings.getnodes('head'), 'sudo %s -c %s osd pool create %s %d %d' % (self.ceph_cmd, self.tmp_conf, name, pg_size, pgp_size)).communicate()
 
+        if replication and replication.isdigit():
+            pool_repl_size = int(replication)
+            common.pdsh(settings.getnodes('head'), 'sudo %s -c %s osd pool set %s size %s' % (self.ceph_cmd, self.tmp_conf, name, replication)).communicate()
+            common.pdsh(settings.getnodes('head'), 'sudo %s -c %s osd pool set %s min_size %d' % (self.ceph_cmd, self.tmp_conf, name, pool_repl_size-1)).communicate()
+
         logger.info('Checking Healh after pool creation.')
         self.check_health()
-
-        if replication and replication.isdigit():
-            common.pdsh(settings.getnodes('head'), 'sudo %s -c %s osd pool set %s size %s' % (self.ceph_cmd, self.tmp_conf, name, replication)).communicate()
-            logger.info('Checking Health after setting pool replication level.')
-            self.check_health()
 
         if prefill_objects > 0 or prefill_time > 0:
             logger.info('prefilling %s %sbyte objects into pool %s' % (prefill_objects, prefill_object_size, name))
