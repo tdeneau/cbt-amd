@@ -27,11 +27,22 @@ class Radosbench(Benchmark):
         self.write_only = config.get('write_only', False)
         self.op_size = config.get('op_size', 4194304)
 
-        self.run_dir = '%s/osd_ra-%08d/op_size-%08d/concurrent_ops-%08d' % (self.run_dir, int(self.osd_ra), int(self.op_size), int(self.concurrent_ops))
-        self.out_dir = '%s/osd_ra-%08d/op_size-%08d/concurrent_ops-%08d' % (self.archive_dir, int(self.osd_ra), int(self.op_size), int(self.concurrent_ops))
         self.pool_profile = config.get('pool_profile', 'default')
         self.cmd_path = config.get('cmd_path', '/usr/bin/rados')
         self.readmode = config.get('readmode', 'seq')
+        self.total_threads = config.get('total_threads', 0)
+        using_total_threads = (self.total_threads != 0)
+        # if total_threads not explicitly specified, we use product of concurrent_procs and concurrent_ops
+        if (not using_total_threads):
+            self.total_threads = self.concurrent_procs * self.concurrent_ops
+            ops_thr_path = 'concurrent_ops-%08d' % int(self.concurrent_ops)
+        else:
+            ops_thr_path = 'total_threads-%08d' % int(self.total_threads)
+
+        dir_path = '/concurrent_procs-%08d/osd_ra-%08d/op_size-%08d/%s' % ( int(self.concurrent_procs), int(self.osd_ra), int(self.op_size), ops_thr_path)
+        self.run_dir = self.run_dir + dir_path
+        self.out_dir = self.archive_dir +  dir_path
+
 
     def exists(self):
         if os.path.exists(self.out_dir):
@@ -47,12 +58,12 @@ class Radosbench(Benchmark):
         monitoring.start("%s/scrub_monitoring" % self.run_dir)
         self.cluster.check_scrub()
         monitoring.stop()
-
+        
         logger.info('Pausing for 60s for idle monitoring.')
         monitoring.start("%s/idle_monitoring" % self.run_dir)
         time.sleep(60)
         monitoring.stop()
-
+        
         common.sync_files('%s/*' % self.run_dir, self.out_dir)
 
         return True
@@ -74,8 +85,6 @@ class Radosbench(Benchmark):
         # We'll always drop caches for rados bench
         self.dropcaches()
 
-        if self.concurrent_ops:
-            concurrent_ops_str = '--concurrent-ios %s' % self.concurrent_ops
         #determine rados version    
         rados_version_str = subprocess.check_output(["rados", "-v"])
         m = re.findall("version (\d+)", rados_version_str)
@@ -110,6 +119,15 @@ class Radosbench(Benchmark):
             if self.pool_per_proc: # support previous behavior of 1 storage pool per rados process
                 pool_name = 'rados-bench-`hostname -s`-%s'%i
                 run_name = ''
+            # compute concurrent_ops for this particular process
+            base = self.total_threads / self.concurrent_procs
+            adj = 1 if (i < (self.total_threads % self.concurrent_procs)) else 0
+            ops_this_proc = base + adj 
+            # if we compute an ops of 0, no further procs need be invoked
+            if ops_this_proc == 0:
+                break
+            concurrent_ops_str = '--concurrent-ios %s' % ops_this_proc
+
             rados_bench_cmd = '%s -c %s -p %s bench %s %s %s %s %s --no-cleanup 2> %s > %s' % \
                  (self.cmd_path_full, self.tmp_conf, pool_name, op_size_str, self.time, mode, concurrent_ops_str, run_name, objecter_log, out_file)
             p = common.pdsh(settings.getnodes('clients'), rados_bench_cmd)
