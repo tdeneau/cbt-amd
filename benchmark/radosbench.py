@@ -53,7 +53,6 @@ class Radosbench(Benchmark):
     # Initialize may only be called once depending on rebuild_every_test setting
     def initialize(self): 
         super(Radosbench, self).initialize()
-
         logger.info('Running scrub monitoring.')
         monitoring.start("%s/scrub_monitoring" % self.run_dir)
         self.cluster.check_scrub()
@@ -63,7 +62,7 @@ class Radosbench(Benchmark):
         monitoring.start("%s/idle_monitoring" % self.run_dir)
         time.sleep(60)
         monitoring.stop()
-        
+            
         common.sync_files('%s/*' % self.run_dir, self.out_dir)
 
         return True
@@ -108,7 +107,7 @@ class Radosbench(Benchmark):
 
         # Run rados bench
         monitoring.start(run_dir)
-        logger.info('Running radosbench read test.')
+        logger.info('Running radosbench %s test.' % mode)
         ps = []
         for i in xrange(self.concurrent_procs):
             out_file = '%s/output.%s' % (run_dir, i)
@@ -128,8 +127,13 @@ class Radosbench(Benchmark):
                 break
             concurrent_ops_str = '--concurrent-ios %s' % ops_this_proc
 
-            rados_bench_cmd = '%s -c %s -p %s bench %s %s %s %s %s --no-cleanup 2> %s > %s' % \
-                 (self.cmd_path_full, self.tmp_conf, pool_name, op_size_str, self.time, mode, concurrent_ops_str, run_name, objecter_log, out_file)
+            if not mode in ['write']:
+                setup_cmd = 'echo Maintaining %s concurrent reads of %s bytes for up to %s seconds > %s' % (ops_this_proc, self.op_size, self.time, out_file)
+            else:
+                setup_cmd = 'rm -f %s' % out_file
+        
+            rados_bench_cmd = '%s; %s -c %s -p %s bench %s %s %s %s %s --no-cleanup 2> %s >> %s' % \
+                 (setup_cmd, self.cmd_path_full, self.tmp_conf, pool_name, op_size_str, self.time, mode, concurrent_ops_str, run_name, objecter_log, out_file)
             p = common.pdsh(settings.getnodes('clients'), rados_bench_cmd)
             ps.append(p)
             time.sleep(0.1)  # added this to avoid server connection problems
