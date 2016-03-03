@@ -187,11 +187,15 @@ class Ceph(Cluster):
         common.pdsh(nodes, 'sudo /etc/init.d/apache2 stop').communicate()
         common.pdsh(nodes, 'sudo killall -9 pdsh').communicate()
         monitoring.stop()
+        # temporary solution until we figure out what to do about /tmp/mon.* directories
+        common.pdsh(settings.getnodes('mons'), 'sudo rm -rf /tmp/mon.*').communicate()
+
 
     def cleanup(self):
         nodes = settings.getnodes('clients', 'osds', 'mons', 'rgws', 'mds')
         logger.info('Deleting %s', self.tmp_dir)
         common.pdsh(nodes, 'sudo rm -rf %s' % self.tmp_dir).communicate()
+
 
     def setup_fs(self):
         use_existing = settings.cluster.get('use_existing', True)
