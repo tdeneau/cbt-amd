@@ -77,8 +77,10 @@ class Radosbench(Benchmark):
 
         if self.concurrent_ops:
             concurrent_ops_str = '--concurrent-ios %s' % self.concurrent_ops
-        #determine rados version    
-        rados_version_str = subprocess.check_output(["rados", "-v"])
+        # determine rados version
+        # use clients[0] and assume all clients have same rados version
+        client0 = settings.cluster.get('clients')[0]
+        rados_version_str = common.pdsh(client0, 'rados -v')
         m = re.findall("version (\d+)", rados_version_str)
         rados_version = int(m[0])
 
