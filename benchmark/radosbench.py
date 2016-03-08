@@ -26,9 +26,11 @@ class Radosbench(Benchmark):
         self.pool_per_proc = config.get('pool_per_proc', False)  # default behavior used to be True
         self.write_only = config.get('write_only', False)
         self.op_size = config.get('op_size', 4194304)
+        self.object_set_id = config.get('object_set_id', '')
 
         self.pool_profile = config.get('pool_profile', 'default')
         self.cmd_path = config.get('cmd_path', '/usr/bin/rados')
+        self.pool = config.get('target_pool', 'rados-bench-cbt')
         self.readmode = config.get('readmode', 'seq')
         self.total_threads = config.get('total_threads', 0)
         using_total_threads = (self.total_threads != 0)
@@ -42,7 +44,6 @@ class Radosbench(Benchmark):
         dir_path = '/concurrent_procs-%08d/osd_ra-%08d/op_size-%08d/%s' % ( int(self.concurrent_procs), int(self.osd_ra), int(self.op_size), ops_thr_path)
         self.run_dir = self.run_dir + dir_path
         self.out_dir = self.archive_dir +  dir_path
-
 
     def exists(self):
         if os.path.exists(self.out_dir):
@@ -84,8 +85,14 @@ class Radosbench(Benchmark):
         # We'll always drop caches for rados bench
         self.dropcaches()
 
-        #determine rados version    
-        rados_version_str = subprocess.check_output(["rados", "-v"])
+        if self.concurrent_ops:
+            concurrent_ops_str = '--concurrent-ios %s' % self.concurrent_ops
+        # determine rados version
+        # use clients[0] and assume all clients have same rados version
+        client0 = "%s@%s" % (settings.cluster.get('user'), settings.cluster.get('clients')[0])
+        # get stdout from first element of tuple
+        rados_version_str = common.pdsh(client0, 'rados -v').communicate()[0]
+        logger.info("Rados Version: %s" % rados_version_str)
         m = re.findall("version (\d+)", rados_version_str)
         rados_version = int(m[0])
 
@@ -113,8 +120,8 @@ class Radosbench(Benchmark):
             out_file = '%s/output.%s' % (run_dir, i)
             objecter_log = '%s/objecter.%s.log' % (run_dir, i)
             # default behavior is to use a single storage pool 
-            pool_name = 'rados-bench-cbt'
-            run_name = '--run-name `hostname -s`-%s'%i
+            pool_name = self.pool
+            run_name = '--run-name %s`hostname -s`-%s'%(self.object_set_id, i)
             if self.pool_per_proc: # support previous behavior of 1 storage pool per rados process
                 pool_name = 'rados-bench-`hostname -s`-%s'%i
                 run_name = ''
