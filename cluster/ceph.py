@@ -247,7 +247,8 @@ class Ceph(Cluster):
         common.pdsh(nodes, 'mkdir -p -m0755 /etc/ceph').communicate()
         common.pdcp(nodes, '', conf_file, self.tmp_conf).communicate()
         common.pdsh(nodes, 'sudo mv /etc/ceph/ceph.conf /etc/ceph/ceph.conf.cbt.bak').communicate()
-        common.pdsh(nodes, 'sudo ln -s %s /etc/ceph/ceph.conf' % self.tmp_conf).communicate()
+        # copy ceph.conf rather than symbolic link it in case we want to reuse cluster and /tmp/cbt/ceph goes away
+        common.pdsh(nodes, 'sudo cp -f %s /etc/ceph/ceph.conf' % self.tmp_conf).communicate()
 
     def make_mons(self):
         # Build and distribute the keyring
