@@ -49,8 +49,10 @@ class Cosbench(Benchmark):
         logger.debug("%s", cosconf)
         if "username" in cosconf and "password" in cosconf and "url" in cosconf:
 
-	    if not self.use_existing:
-	        user, subuser = cosconf["username"].split(':')
+            user, subuser = cosconf["username"].split(':')
+            # see if username already exists, look for user name in quotes
+            stdout, stderr = common.pdsh("%s@%s" % (self.user, self.rgw), 'radosgw-admin metadata list user').communicate()
+            if not re.compile('"%s"' % user, re.MULTILINE).findall(stdout):
                 stdout, stderr = common.pdsh("%s@%s" % (self.user, self.rgw),"radosgw-admin user create --uid='%s' --display-name='%s'" % (user, user)).communicate()
                 stdout, stderr = common.pdsh("%s@%s" % (self.user, self.rgw),"radosgw-admin subuser create --uid=%s --subuser=%s --access=full" % (user, cosconf["username"])).communicate()
                 stdout, stderr = common.pdsh("%s@%s" % (self.user, self.rgw),"radosgw-admin key create --uid=%s --subuser=%s --key-type=swift" % (user, cosconf["username"])).communicate()

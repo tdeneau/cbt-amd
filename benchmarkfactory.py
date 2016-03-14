@@ -9,6 +9,7 @@ from benchmark.librbdfio import LibrbdFio
 from benchmark.nullbench import Nullbench
 from benchmark.cosbench import Cosbench
 from benchmark.cephtestrados import CephTestRados
+from benchmark.stresstest import StressTest
 
 
 def get_all(cluster, iteration):
@@ -59,3 +60,5 @@ def get_object(cluster, benchmark, bconfig):
         return Cosbench(cluster, bconfig)
     if benchmark == 'cephtestrados':
         return CephTestRados(cluster, bconfig)
+    if benchmark == 'stresstest':
+        return StressTest(cluster, bconfig)
