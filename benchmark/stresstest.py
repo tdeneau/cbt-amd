@@ -25,12 +25,16 @@ class s3loop:
         # logger.info('cd /home/tom/ceph-bringup; bash s3-loop.sh %s:%s /tmp/test %s > %s' % (self.gw_host, self.gw_port, id, outfile))
         return p
 
-class s4loop:
+class radosloop:
     def __init__(self, testcfg):
-        logger.info ('s4loop cfg = %s' % testcfg)
+        logger.info ('radosloop cfg = %s' % testcfg)
+        self.pool = testcfg.get('pool', 'rbd')
 
     def run(self, id, run_dir):
-        pass
+        outfile = '%s/stress-radosloop-%d.out ' % (run_dir, id)
+        p = common.pdsh(settings.getnodes('clients'), 'cd /home/tom/ceph-bringup; bash rados-treediff-loop.sh %s /tmp/test %s > %s 2>&1'
+                        % (self.pool, id, outfile))
+        return p
 
 class StressTest(Benchmark):
 
