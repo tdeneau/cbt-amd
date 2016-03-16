@@ -619,6 +619,9 @@ class RecoveryTestThread(threading.Thread):
             common.pdsh(settings.getnodes('head'), '%s -c %s osd up %s;%s' % (self.ceph_cmd, self.cluster.tmp_conf, osdnum, lcmd)).communicate()
             lcmd = self.logcmd("Marking OSD %s in." % osdnum)
             common.pdsh(settings.getnodes('head'), '%s -c %s osd in %s;%s' % (self.ceph_cmd, self.cluster.tmp_conf, osdnum, lcmd)).communicate()
+            # for debugging, log ceph osd df
+            stdout, stdin = common.pdsh(settings.getnodes('head'), 'ceph osd df').communicate()
+            common.pdsh(settings.getnodes('head'), self.logcmd(stdout)).communicate()
 
         self.state = "osdin"
 
@@ -633,6 +636,11 @@ class RecoveryTestThread(threading.Thread):
             common.pdsh(settings.getnodes('head'), self.logcmd('Cluster never went unhealthy.')).communicate()
         else:
             common.pdsh(settings.getnodes('head'), self.logcmd('Cluster appears to have healed.')).communicate()
+
+        # for debugging, log ceph osd df
+        stdout, stdin = common.pdsh(settings.getnodes('head'), 'ceph osd df').communicate()
+        common.pdsh(settings.getnodes('head'), self.logcmd(stdout)).communicate()
+
         self.state = "post"
 
     def post(self):

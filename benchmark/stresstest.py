@@ -18,6 +18,13 @@ class s3loop:
         self.gw_host = testcfg.get('gw_host', 'localhost')
         self.gw_port = testcfg.get('gw_port', 7480)
 
+    def initialize(self):
+        # create the s3user if it does not already exist
+        client0 = settings.getnodes('clients')[0:1]
+        stdout, stderr = common.pdsh(client0, 'radosgw-admin metadata list user').communicate()
+        if not re.compile('"s3user"', re.MULTILINE).findall(stdout):
+            common.pdsh(client0, 'radosgw-admin user create --display-name=s3user --uid=s3user --access-key=abc --secret=123')
+
     def run(self, id, run_dir):
         outfile = '%s/stress-s3loop-%d.out ' % (run_dir, id)
         p = common.pdsh(settings.getnodes('clients'), 'cd /home/tom/ceph-bringup; bash s3-loop.sh %s:%s /tmp/test %s > %s 2>&1'
@@ -30,11 +37,16 @@ class radosloop:
         logger.info ('radosloop cfg = %s' % testcfg)
         self.pool = testcfg.get('pool', 'rbd')
 
+    def initialize(self):
+        # for now, nothing
+        pass
+
     def run(self, id, run_dir):
         outfile = '%s/stress-radosloop-%d.out ' % (run_dir, id)
         p = common.pdsh(settings.getnodes('clients'), 'cd /home/tom/ceph-bringup; bash rados-treediff-loop.sh %s /tmp/test %s > %s 2>&1'
                         % (self.pool, id, outfile))
         return p
+
 
 class StressTest(Benchmark):
 
@@ -48,11 +60,21 @@ class StressTest(Benchmark):
 
     def initialize(self): 
         super(StressTest, self).initialize()
+
+        # clear out the run_dir
+        common.pdsh(settings.getnodes('clients'), 'rm -rf %s/*' % self.run_dir)
+
+        # Run the backfill testing thread if requested
+        if 'recovery_test' in self.cluster.config:
+            logger.info('calling create_recovery_test')
+            recovery_callback = self.recovery_callback
+            self.cluster.create_recovery_test(self.run_dir, recovery_callback)
         return True
 
     def run(self):
         common.make_remote_dir(self.run_dir)
         logger.info('config is %s' % (self.config))
+        
         ps = []
         tests = self.config.get('tests')
         logger.info('tests is %s' % (tests))
@@ -69,6 +91,9 @@ class StressTest(Benchmark):
 
             testobj = cls(testcfg)
             logger.info ('%s running %s, %d copies' % (testobj, tname, tcount))
+            # do any required initialization of this testobj
+            testobj.initialize()
+
             for i in xrange(tcount):
                 logger.info ('%s, copy #%d' % (tname, i))
                 p = testobj.run(i, self.run_dir)
@@ -80,6 +105,7 @@ class StressTest(Benchmark):
         common.sync_files('%s/*' % self.run_dir, self.out_dir)
 
     def recovery_callback(self): 
+        logger.info('recovery thread called dummy recover_callback')
         pass
 
     def __str__(self):
