@@ -5,6 +5,7 @@ import monitoring
 import os
 import sys
 import logging
+import re
 
 
 from cluster.ceph import Ceph
@@ -12,13 +13,29 @@ from benchmark import Benchmark
 
 logger = logging.getLogger('cbt')
 
-class s3loop:
+testTreeDir = '/tmp/test-tree'
+populateCmd = '/tmp/cbt/populate.sh'
+
+class stressloop:
+    def buildTestTree(self):
+        common.pdcp(settings.getnodes('clients'), '', './populate.sh', populateCmd)
+        stdout, stderr = common.pdsh(settings.getnodes('clients'), 'bash %s %s' % (populateCmd, testTreeDir)).communicate()
+        logger.info ('%s %s' % (stdout, stderr))
+
+    def initialize(self):
+        pass
+
+    def run(self, id, run_dir):
+        pass
+
+class s3loop(stressloop):
     def __init__(self, testcfg):
         logger.info ('s3loop cfg = %s' % testcfg)
         self.gw_host = testcfg.get('gw_host', 'localhost')
         self.gw_port = testcfg.get('gw_port', 7480)
 
     def initialize(self):
+        self.buildTestTree()  # need test data for srcdir
         # create the s3user if it does not already exist
         client0 = settings.getnodes('clients')[0:1]
         stdout, stderr = common.pdsh(client0, 'radosgw-admin metadata list user').communicate()
@@ -27,25 +44,31 @@ class s3loop:
 
     def run(self, id, run_dir):
         outfile = '%s/stress-s3loop-%d.out ' % (run_dir, id)
-        p = common.pdsh(settings.getnodes('clients'), 'cd /home/tom/ceph-bringup; bash s3-loop.sh %s:%s /tmp/test %s > %s 2>&1'
-                        % (self.gw_host, self.gw_port, id, outfile))
+        p = common.pdsh(settings.getnodes('clients'), 'cd /home/tom/ceph-bringup; bash s3-loop.sh %s:%s %s %s > %s 2>&1'
+                        % (self.gw_host, self.gw_port, testTreeDir, id, outfile))
         # logger.info('cd /home/tom/ceph-bringup; bash s3-loop.sh %s:%s /tmp/test %s > %s' % (self.gw_host, self.gw_port, id, outfile))
         return p
 
-class radosloop:
+class radosloop(stressloop):
     def __init__(self, testcfg):
         logger.info ('radosloop cfg = %s' % testcfg)
         self.pool = testcfg.get('pool', 'rbd')
 
     def initialize(self):
-        # for now, nothing
-        pass
+        self.buildTestTree()  # need test data for source
 
     def run(self, id, run_dir):
         outfile = '%s/stress-radosloop-%d.out ' % (run_dir, id)
-        p = common.pdsh(settings.getnodes('clients'), 'cd /home/tom/ceph-bringup; bash rados-treediff-loop.sh %s /tmp/test %s > %s 2>&1'
-                        % (self.pool, id, outfile))
+        p = common.pdsh(settings.getnodes('clients'), 'cd /home/tom/ceph-bringup; bash rados-treediff-loop.sh %s %s %s > %s 2>&1'
+                        % (self.pool, testTreeDir, id, outfile))
         return p
+
+
+# dummy for now
+class rbdloop(stressloop):
+    def __init__(self, testcfg):
+        logger.info ('rbdloop cfg = %s' % testcfg)
+        self.pool = testcfg.get('pool', 'rbd')
 
 
 class StressTest(Benchmark):
@@ -81,6 +104,9 @@ class StressTest(Benchmark):
         for tname in tests.keys():
             testcfg = tests.get(tname)
             tcount = testcfg.get('copies', 0)
+            if tcount == 0:
+                continue
+
             # instantiate test obj
             # first get class based on test name
             module = sys.modules[globals()['__name__']]
@@ -88,7 +114,7 @@ class StressTest(Benchmark):
             if (cls is None):
                 logger.fatal ('FATAL: no stresstest named %s' % (tname))
                 sys.exit()
-
+                
             testobj = cls(testcfg)
             logger.info ('%s running %s, %d copies' % (testobj, tname, tcount))
             # do any required initialization of this testobj
@@ -99,6 +125,9 @@ class StressTest(Benchmark):
                 p = testobj.run(i, self.run_dir)
                 if p:
                     ps.append(p)
+
+        # end of for tname in tests.keys():
+            
         for p in ps:
             p.wait()
 

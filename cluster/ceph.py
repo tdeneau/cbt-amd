@@ -620,8 +620,8 @@ class RecoveryTestThread(threading.Thread):
             lcmd = self.logcmd("Marking OSD %s in." % osdnum)
             common.pdsh(settings.getnodes('head'), '%s -c %s osd in %s;%s' % (self.ceph_cmd, self.cluster.tmp_conf, osdnum, lcmd)).communicate()
             # for debugging, log ceph osd df
-            stdout, stdin = common.pdsh(settings.getnodes('head'), 'ceph osd df').communicate()
-            common.pdsh(settings.getnodes('head'), self.logcmd(stdout)).communicate()
+            # stdout, stdin = common.pdsh(settings.getnodes('head'), 'ceph osd df').communicate()
+            # common.pdsh(settings.getnodes('head'), self.logcmd(stdout)).communicate()
 
         self.state = "osdin"
 
