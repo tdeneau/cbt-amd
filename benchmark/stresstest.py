@@ -15,6 +15,10 @@ logger = logging.getLogger('cbt')
 
 testTreeDir = '/tmp/test-tree'
 populateCmd = '/tmp/cbt/populate.sh'
+tmpCbt = '/tmp/cbt'
+s3LoopCmd   = 's3-loop.sh'
+radosLoopCmd = 'rados-treediff-loop.sh'
+rbdLoopCmd = 'rbd-loop.sh'
 
 class stressloop:
     def buildTestTree(self):
@@ -44,23 +48,29 @@ class s3loop(stressloop):
 
     def run(self, id, run_dir):
         outfile = '%s/stress-s3loop-%d.out ' % (run_dir, id)
-        p = common.pdsh(settings.getnodes('clients'), 'cd /home/tom/ceph-bringup; bash s3-loop.sh %s:%s %s %s > %s 2>&1'
-                        % (self.gw_host, self.gw_port, testTreeDir, id, outfile))
-        # logger.info('cd /home/tom/ceph-bringup; bash s3-loop.sh %s:%s /tmp/test %s > %s' % (self.gw_host, self.gw_port, id, outfile))
+        localS3LoopCmd = '../%s' % s3LoopCmd
+        remoteS3LoopCmd = '%s/%s' % (tmpCbt, s3LoopCmd)
+        common.pdcp(settings.getnodes('clients'), '', localS3LoopCmd, remoteS3LoopCmd)
+        p = common.pdsh(settings.getnodes('clients'), 'bash %s %s:%s %s %s > %s 2>&1'
+                        % (remoteS3LoopCmd, self.gw_host, self.gw_port, testTreeDir, id, outfile))
         return p
 
 class radosloop(stressloop):
     def __init__(self, testcfg):
         logger.info ('radosloop cfg = %s' % testcfg)
         self.pool = testcfg.get('pool', 'rbd')
+        self.poolname = "cbt-kernelrbdfio"
 
     def initialize(self):
         self.buildTestTree()  # need test data for source
 
     def run(self, id, run_dir):
         outfile = '%s/stress-radosloop-%d.out ' % (run_dir, id)
-        p = common.pdsh(settings.getnodes('clients'), 'cd /home/tom/ceph-bringup; bash rados-treediff-loop.sh %s %s %s > %s 2>&1'
-                        % (self.pool, testTreeDir, id, outfile))
+        localRadosLoopCmd = '../%s' % radosLoopCmd
+        remoteRadosLoopCmd = '%s/%s' % (tmpCbt, radosLoopCmd)
+        common.pdcp(settings.getnodes('clients'), '', localRadosLoopCmd, remoteRadosLoopCmd)
+        p = common.pdsh(settings.getnodes('clients'), 'bash %s %s %s %s > %s 2>&1'
+                        % (remoteRadosLoopCmd, self.pool, testTreeDir, id, outfile))
         return p
 
 
@@ -69,6 +79,32 @@ class rbdloop(stressloop):
     def __init__(self, testcfg):
         logger.info ('rbdloop cfg = %s' % testcfg)
         self.pool = testcfg.get('pool', 'rbd')
+
+    def initialize(self):
+        self.buildTestTree()  # need test data for source
+        # create rbd mapping
+
+    def run(self, id, run_dir):
+        outfile = '%s/stress-rbdloop-%d.out ' % (run_dir, id)
+        localRbdLoopCmd = '../%s' % rbdLoopCmd
+        remoteRbdLoopCmd = '%s/%s' % (tmpCbt, rbdLoopCmd)
+        p = common.pdsh(settings.getnodes('clients'), 'bash %s %s %s %s > %s 2>&1'
+                        % (remoteRbdLoopCmd, self.pool, testTreeDir, id, outfile))
+        return p
+
+
+    def mkRbdImages(self):
+        self.cluster.rmpool(self.poolname, self.pool_profile)
+        self.cluster.mkpool(self.poolname, self.pool_profile)
+        common.pdsh(settings.getnodes('clients'), '/usr/bin/rbd create cbt-kernelrbdfio-`hostname -s` --size %s --pool %s' % (self.vol_size, self.poolname)).communicate()
+        common.pdsh(settings.getnodes('clients'), 'sudo rbd map cbt-kernelrbdfio-`hostname -s` --pool %s --id admin' % self.poolname).communicate()
+        common.pdsh(settings.getnodes('clients'), 'sudo mkfs.xfs /dev/rbd/cbt-kernelrbdfio/cbt-kernelrbdfio-`hostname -s`').communicate()
+        common.pdsh(settings.getnodes('clients'), 'sudo mkdir -p -m0755 -- %s/cbt-kernelrbdfio-`hostname -s`' % self.cluster.mnt_dir).communicate()
+        common.pdsh(settings.getnodes('clients'), 'sudo mount -t xfs -o noatime,inode64 /dev/rbd/cbt-kernelrbdfio/cbt-kernelrbdfio-`hostname -s` %s/cbt-kernelrbdfio-`hostname -s`' % self.cluster.mnt_dir).communicate()
+        monitoring.stop()
+
+
+
 
 
 class StressTest(Benchmark):
