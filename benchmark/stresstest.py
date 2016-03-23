@@ -103,7 +103,7 @@ class rbdloop(stressloop):
         self.cluster.mkpool(self.poolname, self.pool_profile)
         # first unmount, unmap and rm image if it is already there
         common.pdsh(settings.getnodes('clients'), 'sudo umount /dev/rbd/%s/%s-`hostname -s`' % (self.poolname, self.poolname)).communicate()
-        common.pdsh(settings.getnodes('clients'), 'sudo rbd -p %s unmap %s-`hostname -s`' % (self.poolname, self.poolname)).communicate()
+        common.pdsh(settings.getnodes('clients'), 'sudo rbd -p %s unmap /dev/rbd/%s/%s-`hostname -s`' % (self.poolname, self.poolname, self.poolname)).communicate()
         common.pdsh(settings.getnodes('clients'), 'sudo rbd -p %s rm %s-`hostname -s`' % (self.poolname, self.poolname)).communicate()
 
         # now create, map and mount the new img
