@@ -33,7 +33,7 @@ class stressloop:
         pass
 
 class s3loop(stressloop):
-    def __init__(self, testcfg):
+    def __init__(self, testcfg, stressTestObj):
         logger.info ('s3loop cfg = %s' % testcfg)
         self.gw_host = testcfg.get('gw_host', 'localhost')
         self.gw_port = testcfg.get('gw_port', 7480)
@@ -56,7 +56,7 @@ class s3loop(stressloop):
         return p
 
 class radosloop(stressloop):
-    def __init__(self, testcfg):
+    def __init__(self, testcfg, stressTestObj):
         logger.info ('radosloop cfg = %s' % testcfg)
         self.pool = testcfg.get('pool', 'rbd')
         self.poolname = "cbt-kernelrbdfio"
@@ -76,35 +76,45 @@ class radosloop(stressloop):
 
 # dummy for now
 class rbdloop(stressloop):
-    def __init__(self, testcfg):
+    def __init__(self, testcfg, stressTestObj):
         logger.info ('rbdloop cfg = %s' % testcfg)
-        self.pool = testcfg.get('pool', 'rbd')
+        self.poolname = 'cbt-kernelrbdfio'
+        self.pool_profile = testcfg.get('pool_profile', 'default')
+        self.vol_size = testcfg.get('vol_size', 65536)
+        self.stressTestObj = stressTestObj
+        self.cluster = stressTestObj.cluster
 
     def initialize(self):
         self.buildTestTree()  # need test data for source
         # create rbd mapping
+        self.mkRbdImages()
 
     def run(self, id, run_dir):
         outfile = '%s/stress-rbdloop-%d.out ' % (run_dir, id)
         localRbdLoopCmd = '../%s' % rbdLoopCmd
         remoteRbdLoopCmd = '%s/%s' % (tmpCbt, rbdLoopCmd)
-        p = common.pdsh(settings.getnodes('clients'), 'bash %s %s %s %s > %s 2>&1'
-                        % (remoteRbdLoopCmd, self.pool, testTreeDir, id, outfile))
+        p = common.pdsh(settings.getnodes('clients'), 'echo bash %s %s %s %s > %s 2>&1'
+                        % (remoteRbdLoopCmd, self.poolname, testTreeDir, id, outfile))
         return p
 
 
     def mkRbdImages(self):
         self.cluster.rmpool(self.poolname, self.pool_profile)
         self.cluster.mkpool(self.poolname, self.pool_profile)
-        common.pdsh(settings.getnodes('clients'), '/usr/bin/rbd create cbt-kernelrbdfio-`hostname -s` --size %s --pool %s' % (self.vol_size, self.poolname)).communicate()
-        common.pdsh(settings.getnodes('clients'), 'sudo rbd map cbt-kernelrbdfio-`hostname -s` --pool %s --id admin' % self.poolname).communicate()
-        common.pdsh(settings.getnodes('clients'), 'sudo mkfs.xfs /dev/rbd/cbt-kernelrbdfio/cbt-kernelrbdfio-`hostname -s`').communicate()
-        common.pdsh(settings.getnodes('clients'), 'sudo mkdir -p -m0755 -- %s/cbt-kernelrbdfio-`hostname -s`' % self.cluster.mnt_dir).communicate()
-        common.pdsh(settings.getnodes('clients'), 'sudo mount -t xfs -o noatime,inode64 /dev/rbd/cbt-kernelrbdfio/cbt-kernelrbdfio-`hostname -s` %s/cbt-kernelrbdfio-`hostname -s`' % self.cluster.mnt_dir).communicate()
-        monitoring.stop()
+        # first unmount, unmap and rm image if it is already there
+        common.pdsh(settings.getnodes('clients'), 'sudo umount /dev/rbd/%s/%s-`hostname -s`' % (self.poolname, self.poolname)).communicate()
+        common.pdsh(settings.getnodes('clients'), 'sudo rbd -p %s unmap %s-`hostname -s`' % (self.poolname, self.poolname)).communicate()
+        common.pdsh(settings.getnodes('clients'), 'sudo rbd -p %s rm %s-`hostname -s`' % (self.poolname, self.poolname)).communicate()
 
-
-
+        # now create, map and mount the new img
+        common.pdsh(settings.getnodes('clients'), 'sudo rbd create %s-`hostname -s` --size %s --pool %s' % (self.poolname, self.vol_size, self.poolname)).communicate()
+        common.pdsh(settings.getnodes('clients'), 'sudo rbd map %s-`hostname -s` --pool %s --id admin' % (self.poolname, self.poolname)).communicate()
+        common.pdsh(settings.getnodes('clients'), 'sudo mkfs.xfs /dev/rbd/%s/%s-`hostname -s`' % (self.poolname, self.poolname)).communicate()
+        common.pdsh(settings.getnodes('clients'), 'sudo mkdir -p -m0755 -- %s/%s-`hostname -s`' % (self.cluster.mnt_dir, self.poolname)).communicate()
+        common.pdsh(settings.getnodes('clients'), 'sudo mount -t xfs -o noatime,inode64 /dev/rbd/%s/%s-`hostname -s` %s/%s-`hostname -s`' % (self.poolname, self.poolname, self.cluster.mnt_dir, self.poolname)).communicate()
+        # print status
+        stdout,stderr = common.pdsh(settings.getnodes('clients'), 'rbd showmapped').communicate()
+        logger.info ('\n%s %s' % (stdout, stderr))
 
 
 class StressTest(Benchmark):
@@ -151,7 +161,7 @@ class StressTest(Benchmark):
                 logger.fatal ('FATAL: no stresstest named %s' % (tname))
                 sys.exit()
                 
-            testobj = cls(testcfg)
+            testobj = cls(testcfg, self)
             logger.info ('%s running %s, %d copies' % (testobj, tname, tcount))
             # do any required initialization of this testobj
             testobj.initialize()
