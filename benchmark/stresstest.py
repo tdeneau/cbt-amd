@@ -93,18 +93,21 @@ class rbdloop(stressloop):
         outfile = '%s/stress-rbdloop-%d.out ' % (run_dir, id)
         localRbdLoopCmd = '../%s' % rbdLoopCmd
         remoteRbdLoopCmd = '%s/%s' % (tmpCbt, rbdLoopCmd)
-        p = common.pdsh(settings.getnodes('clients'), 'echo bash %s %s %s %s > %s 2>&1'
-                        % (remoteRbdLoopCmd, self.poolname, testTreeDir, id, outfile))
+        common.pdcp(settings.getnodes('clients'), '', localRbdLoopCmd, remoteRbdLoopCmd)
+        p = common.pdsh(settings.getnodes('clients'), 'bash %s %s/%s-`hostname -s` %s %s > %s 2>&1'
+                        % (remoteRbdLoopCmd, self.cluster.mnt_dir, self.poolname, testTreeDir, id, outfile))
         return p
 
 
     def mkRbdImages(self):
-        self.cluster.rmpool(self.poolname, self.pool_profile)
-        self.cluster.mkpool(self.poolname, self.pool_profile)
         # first unmount, unmap and rm image if it is already there
         common.pdsh(settings.getnodes('clients'), 'sudo umount /dev/rbd/%s/%s-`hostname -s`' % (self.poolname, self.poolname)).communicate()
         common.pdsh(settings.getnodes('clients'), 'sudo rbd -p %s unmap /dev/rbd/%s/%s-`hostname -s`' % (self.poolname, self.poolname, self.poolname)).communicate()
         common.pdsh(settings.getnodes('clients'), 'sudo rbd -p %s rm %s-`hostname -s`' % (self.poolname, self.poolname)).communicate()
+
+        # rebuild the pool
+        self.cluster.rmpool(self.poolname, self.pool_profile)
+        self.cluster.mkpool(self.poolname, self.pool_profile)
 
         # now create, map and mount the new img
         common.pdsh(settings.getnodes('clients'), 'sudo rbd create %s-`hostname -s` --size %s --pool %s' % (self.poolname, self.vol_size, self.poolname)).communicate()
