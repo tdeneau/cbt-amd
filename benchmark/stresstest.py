@@ -6,6 +6,8 @@ import os
 import sys
 import logging
 import re
+import threading
+import time
 
 
 from cluster.ceph import Ceph
@@ -101,15 +103,18 @@ class rbdloop(stressloop):
 
     def mkRbdImages(self):
         # first unmount, unmap and rm image if it is already there
+        logger.info ('unmapping and unmounting rbd images')
         common.pdsh(settings.getnodes('clients'), 'sudo umount /dev/rbd/%s/%s-`hostname -s`' % (self.poolname, self.poolname)).communicate()
         common.pdsh(settings.getnodes('clients'), 'sudo rbd -p %s unmap /dev/rbd/%s/%s-`hostname -s`' % (self.poolname, self.poolname, self.poolname)).communicate()
         common.pdsh(settings.getnodes('clients'), 'sudo rbd -p %s rm %s-`hostname -s`' % (self.poolname, self.poolname)).communicate()
 
         # rebuild the pool
+        logger.info ('creating the pool')
         self.cluster.rmpool(self.poolname, self.pool_profile)
         self.cluster.mkpool(self.poolname, self.pool_profile)
 
         # now create, map and mount the new img
+        logger.info ('creating mapping and mounting rbd image')
         common.pdsh(settings.getnodes('clients'), 'sudo rbd create %s-`hostname -s` --size %s --pool %s' % (self.poolname, self.vol_size, self.poolname)).communicate()
         common.pdsh(settings.getnodes('clients'), 'sudo rbd map %s-`hostname -s` --pool %s --id admin' % (self.poolname, self.poolname)).communicate()
         common.pdsh(settings.getnodes('clients'), 'sudo mkfs.xfs /dev/rbd/%s/%s-`hostname -s`' % (self.poolname, self.poolname)).communicate()
@@ -118,6 +123,13 @@ class rbdloop(stressloop):
         # print status
         stdout,stderr = common.pdsh(settings.getnodes('clients'), 'rbd showmapped').communicate()
         logger.info ('\n%s %s' % (stdout, stderr))
+
+
+def tailer(run_dir):
+    time.sleep(5)  # wait a while for .out files to get created
+    ps =  common.pdsh(settings.getnodes('clients'), 'tail -f %s/*.out' % run_dir)
+    for line in iter(ps.stdout.readline, b""):
+        print line,     # print without cr
 
 
 class StressTest(Benchmark):
@@ -142,6 +154,7 @@ class StressTest(Benchmark):
             recovery_callback = self.recovery_callback
             self.cluster.create_recovery_test(self.run_dir, recovery_callback)
         return True
+
 
     def run(self):
         common.make_remote_dir(self.run_dir)
@@ -176,7 +189,14 @@ class StressTest(Benchmark):
                     ps.append(p)
 
         # end of for tname in tests.keys():
-            
+        # spawn a thread to tail -f the output files from the stress tests
+        threads=[]
+        t = threading.Thread(target=tailer, args=(self.run_dir,))
+        t.daemon = True
+        threads.append(t)
+        t.start()
+
+        # wait for stress tests to finish (if ever)
         for p in ps:
             p.wait()
 
