@@ -25,8 +25,10 @@ rbdLoopCmd = 'rbd-loop.sh'
 class stressloop:
     def buildTestTree(self):
         common.pdcp(settings.getnodes('clients'), '', './populate.sh', populateCmd)
+        # saw cases where we needed a pause here
+        time.sleep(2) 
         stdout, stderr = common.pdsh(settings.getnodes('clients'), 'bash %s %s' % (populateCmd, testTreeDir)).communicate()
-        logger.info ('%s %s' % (stdout, stderr))
+        logger.info ('\n%s %s' % (stdout, stderr))
 
     def initialize(self):
         pass
@@ -53,6 +55,8 @@ class s3loop(stressloop):
         localS3LoopCmd = '../%s' % s3LoopCmd
         remoteS3LoopCmd = '%s/%s' % (tmpCbt, s3LoopCmd)
         common.pdcp(settings.getnodes('clients'), '', localS3LoopCmd, remoteS3LoopCmd)
+        # saw cases where we needed a pause here
+        time.sleep(2) 
         p = common.pdsh(settings.getnodes('clients'), 'bash %s %s:%s %s %s > %s 2>&1'
                         % (remoteS3LoopCmd, self.gw_host, self.gw_port, testTreeDir, id, outfile))
         return p
@@ -71,6 +75,8 @@ class radosloop(stressloop):
         localRadosLoopCmd = '../%s' % radosLoopCmd
         remoteRadosLoopCmd = '%s/%s' % (tmpCbt, radosLoopCmd)
         common.pdcp(settings.getnodes('clients'), '', localRadosLoopCmd, remoteRadosLoopCmd)
+        # saw cases where we needed a pause here
+        time.sleep(2) 
         p = common.pdsh(settings.getnodes('clients'), 'bash %s %s %s %s > %s 2>&1'
                         % (remoteRadosLoopCmd, self.pool, testTreeDir, id, outfile))
         return p
@@ -96,6 +102,8 @@ class rbdloop(stressloop):
         localRbdLoopCmd = '../%s' % rbdLoopCmd
         remoteRbdLoopCmd = '%s/%s' % (tmpCbt, rbdLoopCmd)
         common.pdcp(settings.getnodes('clients'), '', localRbdLoopCmd, remoteRbdLoopCmd)
+        # saw cases where we needed a pause here
+        time.sleep(2) 
         p = common.pdsh(settings.getnodes('clients'), 'bash %s %s/%s-`hostname -s` %s %s > %s 2>&1'
                         % (remoteRbdLoopCmd, self.cluster.mnt_dir, self.poolname, testTreeDir, id, outfile))
         return p
