@@ -66,6 +66,7 @@ class radosloop(stressloop):
         logger.info ('radosloop cfg = %s' % testcfg)
         self.pool = testcfg.get('pool', 'rbd')
         self.poolname = "cbt-kernelrbdfio"
+        self.threads = testcfg.get('threads', 8)
 
     def initialize(self):
         self.buildTestTree()  # need test data for source
@@ -77,8 +78,8 @@ class radosloop(stressloop):
         common.pdcp(settings.getnodes('clients'), '', localRadosLoopCmd, remoteRadosLoopCmd)
         # saw cases where we needed a pause here
         time.sleep(2) 
-        p = common.pdsh(settings.getnodes('clients'), 'bash %s %s %s %s > %s 2>&1'
-                        % (remoteRadosLoopCmd, self.pool, testTreeDir, id, outfile))
+        p = common.pdsh(settings.getnodes('clients'), 'bash %s %s %s %s %s > %s 2>&1'
+                        % (remoteRadosLoopCmd, self.pool, testTreeDir, id, self.threads, outfile))
         return p
 
 
