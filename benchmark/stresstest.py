@@ -8,7 +8,8 @@ import logging
 import re
 import threading
 import time
-
+import signal
+from AsyncFileReader import *
 
 from cluster.ceph import Ceph
 from benchmark import Benchmark
@@ -67,6 +68,7 @@ class radosloop(stressloop):
         self.pool = testcfg.get('pool', 'rbd')
         self.poolname = "cbt-kernelrbdfio"
         self.threads = testcfg.get('threads', 8)
+        self.stressTestObj = stressTestObj
 
     def initialize(self):
         self.buildTestTree()  # need test data for source
@@ -78,9 +80,13 @@ class radosloop(stressloop):
         common.pdcp(settings.getnodes('clients'), '', localRadosLoopCmd, remoteRadosLoopCmd)
         # saw cases where we needed a pause here
         time.sleep(2) 
-        p = common.pdsh(settings.getnodes('clients'), 'bash %s %s %s %s %s > %s 2>&1'
-                        % (remoteRadosLoopCmd, self.pool, testTreeDir, id, self.threads, outfile))
-        return p
+        pset = []
+        for clientnode in self.stressTestObj.cluster.config.get('clients', []):
+            print 'spawn on client ', clientnode
+            cmdargs = ['ssh', clientnode, '/usr/bin/bash', remoteRadosLoopCmd, self.pool, testTreeDir, str(id), str(self.threads), '2>&1|tee', outfile]
+            p = common.popen(cmdargs)
+            pset.append(p)
+        return pset
 
 
 # dummy for now
@@ -134,12 +140,16 @@ class rbdloop(stressloop):
         logger.info ('\n%s %s' % (stdout, stderr))
 
 
-def tailer(run_dir):
-    time.sleep(5)  # wait a while for .out files to get created
-    ps =  common.pdsh(settings.getnodes('clients'), 'tail -f %s/*.out' % run_dir)
-    for line in iter(ps.stdout.readline, b""):
-        print line,     # print without cr
+# global ps used by KillSubprocs
+ps = []
+readers = []
+original_sigint = None
 
+def exitKillSubprocs(signum, frame):
+    for p in ps:
+        print 'in Ctrl-C handler, killing subprocess ', p.pid
+        p.kill()
+    sys.exit()
 
 class StressTest(Benchmark):
 
@@ -166,6 +176,7 @@ class StressTest(Benchmark):
 
 
     def run(self):
+        global ps, original_sigint
         common.make_remote_dir(self.run_dir)
         logger.info('config is %s' % (self.config))
         
@@ -195,19 +206,36 @@ class StressTest(Benchmark):
                 logger.info ('%s, copy #%d' % (tname, i))
                 p = testobj.run(i, self.run_dir)
                 if p:
-                    ps.append(p)
+                    ps += p
+                    print 'ps is now', ps
 
         # end of for tname in tests.keys():
-        # spawn a thread to tail -f the output files from the stress tests
-        threads=[]
-        t = threading.Thread(target=tailer, args=(self.run_dir,))
-        t.daemon = True
-        threads.append(t)
-        t.start()
 
-        # wait for stress tests to finish (if ever)
-        for p in ps:
-            p.wait()
+        # set up SIGINT to kill the subprocesses
+        # store the original SIGINT handler
+        original_sigint = signal.getsignal(signal.SIGINT)
+        signal.signal(signal.SIGINT, exitKillSubprocs)
+
+        # create async readers for each subprocess
+        for proc in ps:
+            stdout_queue = Queue.Queue()
+            stdout_reader = AsyncFileReader(proc.stdout, stdout_queue)
+            stdout_reader.start()
+            readers.append(stdout_reader)
+
+        # wait for stress tests to finish (if ever) and meanwhile show stdout
+        while len(readers) > 0:
+            for rdr in readers:
+                if rdr.eof():
+                    print rdr, ' reached EOF'
+                    readers.remove(rdr)
+                    break
+                else:
+                    while not rdr.queue().empty():
+                        line = rdr.queue().get()
+                        print line,
+            time.sleep(2)
+        # end of while loop            
 
         common.sync_files('%s/*' % self.run_dir, self.out_dir)
 
@@ -217,3 +245,5 @@ class StressTest(Benchmark):
 
     def __str__(self):
         super(StressTest, self).__str__()
+
+
