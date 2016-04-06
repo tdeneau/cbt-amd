@@ -42,6 +42,7 @@ class s3loop(stressloop):
         logger.info ('s3loop cfg = %s' % testcfg)
         self.gw_host = testcfg.get('gw_host', 'localhost')
         self.gw_port = testcfg.get('gw_port', 7480)
+        self.stressTestObj = stressTestObj
 
     def initialize(self):
         self.buildTestTree()  # need test data for srcdir
@@ -58,9 +59,13 @@ class s3loop(stressloop):
         common.pdcp(settings.getnodes('clients'), '', localS3LoopCmd, remoteS3LoopCmd)
         # saw cases where we needed a pause here
         time.sleep(2) 
-        p = common.pdsh(settings.getnodes('clients'), 'bash %s %s:%s %s %s > %s 2>&1'
-                        % (remoteS3LoopCmd, self.gw_host, self.gw_port, testTreeDir, id, outfile))
-        return p
+        pset = []
+        for clientnode in self.stressTestObj.cluster.config.get('clients', []):
+            print 'spawn on client ', clientnode
+            cmdargs = ['ssh', clientnode, '/usr/bin/bash', remoteS3LoopCmd, '%s:%s' % (self.gw_host, self.gw_port), testTreeDir, str(id), '2>&1|tee', outfile]
+            p = common.popen(cmdargs)
+            pset.append(p)
+        return pset
 
 class radosloop(stressloop):
     def __init__(self, testcfg, stressTestObj):
@@ -111,9 +116,14 @@ class rbdloop(stressloop):
         common.pdcp(settings.getnodes('clients'), '', localRbdLoopCmd, remoteRbdLoopCmd)
         # saw cases where we needed a pause here
         time.sleep(2) 
-        p = common.pdsh(settings.getnodes('clients'), 'bash %s %s/%s-`hostname -s` %s %s > %s 2>&1'
-                        % (remoteRbdLoopCmd, self.cluster.mnt_dir, self.poolname, testTreeDir, id, outfile))
-        return p
+        pset = []
+        for clientnode in self.stressTestObj.cluster.config.get('clients', []):
+            print 'spawn on client ', clientnode
+            cmdargs = ['ssh', clientnode, '/usr/bin/bash', remoteRbdLoopCmd, '%s/%s-`hostname -s`' % (self.cluster.mnt_dir, self.poolname),
+                       testTreeDir, str(id), '2>&1|tee', outfile]
+            p = common.popen(cmdargs)
+            pset.append(p)
+        return pset
 
 
     def mkRbdImages(self):
