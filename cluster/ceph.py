@@ -459,7 +459,14 @@ class Ceph(Cluster):
         for name,profile in erasure_profiles.items():
             k = profile.get('erasure_k', 6)
             m = profile.get('erasure_m', 2)
-	    common.pdsh(settings.getnodes('head'), '%s -c %s osd erasure-code-profile set %s ruleset-failure-domain=osd k=%s m=%s' % (self.ceph_cmd, self.tmp_conf, name, k, m)).communicate()
+            totalCopies = k + m
+            osdNodeList = self.config.get('osds', [])
+            osdNodeCount = len(osdNodeList)
+            step = 'host' if totalCopies <= osdNodeCount else 'osd'
+            plugin = profile.get('plugin', 'jerasure')
+            technique = profile.get('technique', 'reed_sol_van')
+            # we are assuming that totalCopies is less than totalOsds but maybe we should check that
+	    common.pdsh(settings.getnodes('head'), '%s -c %s osd erasure-code-profile set %s ruleset-failure-domain=%s k=%s m=%s plugin=%s technique=%s' % (self.ceph_cmd, self.tmp_conf, name, step, k, m, plugin, technique)).communicate()
             self.set_ruleset(name)
 
     def mkpool(self, name, profile_name, base_name=None):
@@ -488,7 +495,7 @@ class Ceph(Cluster):
         prefill_time = profile.get('prefill_time', 0)
 
 #        common.pdsh(settings.getnodes('head'), 'sudo ceph -c %s osd pool delete %s %s --yes-i-really-really-mean-it' % (self.tmp_conf, name, name)).communicate()
-        common.pdsh(settings.getnodes('head'), 'sudo %s -c %s osd pool create %s %d %d %s' % (self.ceph_cmd, self.tmp_conf, name, pg_size, pgp_size, erasure_profile)).communicate()
+#        common.pdsh(settings.getnodes('head'), 'sudo %s -c %s osd pool create %s %d %d %s' % (self.ceph_cmd, self.tmp_conf, name, pg_size, pgp_size, erasure_profile)).communicate()
 
         if replication and replication == 'erasure':
             common.pdsh(settings.getnodes('head'), 'sudo %s -c %s osd pool create %s %d %d erasure %s' % (self.ceph_cmd, self.tmp_conf, name, pg_size, pgp_size, erasure_profile)).communicate()
