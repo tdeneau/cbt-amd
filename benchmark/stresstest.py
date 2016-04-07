@@ -47,10 +47,10 @@ class s3loop(stressloop):
     def initialize(self):
         self.buildTestTree()  # need test data for srcdir
         # create the s3user if it does not already exist
-        client0 = settings.getnodes('clients')[0:1]
-        stdout, stderr = common.pdsh(client0, 'radosgw-admin metadata list user').communicate()
+        head = settings.getnodes('head')
+        stdout, stderr = common.pdsh(head, 'radosgw-admin metadata list user').communicate()
         if not re.compile('"s3user"', re.MULTILINE).findall(stdout):
-            common.pdsh(client0, 'radosgw-admin user create --display-name=s3user --uid=s3user --access-key=abc --secret=123')
+            common.pdsh(head, 'radosgw-admin user create --display-name=s3user --uid=s3user --access-key=abc --secret=123')
 
     def run(self, id, run_dir):
         outfile = '%s/stress-s3loop-%d.out ' % (run_dir, id)
