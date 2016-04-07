@@ -23,7 +23,14 @@ s3LoopCmd   = 's3-loop.sh'
 radosLoopCmd = 'rados-treediff-loop.sh'
 rbdLoopCmd = 'rbd-loop.sh'
 
-class stressloop:
+class stressloop(object):
+    def __init__(self, testcfg, stressTestObj):
+        self.stressTestObj = stressTestObj
+        self.cluster = stressTestObj.cluster
+        self.pool_profile = testcfg.get('pool_profile', 'default')
+        logger.info('%s cfg = %s' % (self.__class__.__name__, testcfg))
+
+
     def buildTestTree(self):
         common.pdcp(settings.getnodes('clients'), '', './populate.sh', populateCmd)
         # saw cases where we needed a pause here
@@ -37,12 +44,19 @@ class stressloop:
     def run(self, id, run_dir):
         pass
 
+    def rebuildPool(self):
+        # rebuild the pool
+        logger.info ('creating the pool %s' % self.poolname)
+        self.cluster.rmpool(self.poolname, self.pool_profile)
+        self.cluster.mkpool(self.poolname, self.pool_profile)
+
+
+
 class s3loop(stressloop):
     def __init__(self, testcfg, stressTestObj):
-        logger.info ('s3loop cfg = %s' % testcfg)
+        super(s3loop, self).__init__(testcfg, stressTestObj)
         self.gw_host = testcfg.get('gw_host', 'localhost')
         self.gw_port = testcfg.get('gw_port', 7480)
-        self.stressTestObj = stressTestObj
 
     def initialize(self):
         self.buildTestTree()  # need test data for srcdir
@@ -69,14 +83,13 @@ class s3loop(stressloop):
 
 class radosloop(stressloop):
     def __init__(self, testcfg, stressTestObj):
-        logger.info ('radosloop cfg = %s' % testcfg)
-        self.pool = testcfg.get('pool', 'rbd')
-        self.poolname = "cbt-kernelrbdfio"
+        super(radosloop, self).__init__(testcfg, stressTestObj)
+        self.poolname = 'cbt-rados-stress'
         self.threads = testcfg.get('threads', 8)
-        self.stressTestObj = stressTestObj
 
     def initialize(self):
         self.buildTestTree()  # need test data for source
+        self.rebuildPool()
 
     def run(self, id, run_dir):
         outfile = '%s/stress-radosloop-%d.out ' % (run_dir, id)
@@ -88,7 +101,7 @@ class radosloop(stressloop):
         pset = []
         for clientnode in self.stressTestObj.cluster.config.get('clients', []):
             print 'spawn on client ', clientnode
-            cmdargs = ['ssh', clientnode, '/usr/bin/bash', remoteRadosLoopCmd, self.pool, testTreeDir, str(id), str(self.threads), '2>&1|tee', outfile]
+            cmdargs = ['ssh', clientnode, '/usr/bin/bash', remoteRadosLoopCmd, self.poolname, testTreeDir, str(id), str(self.threads), '2>&1|tee', outfile]
             p = common.popen(cmdargs)
             pset.append(p)
         return pset
@@ -97,12 +110,9 @@ class radosloop(stressloop):
 # dummy for now
 class rbdloop(stressloop):
     def __init__(self, testcfg, stressTestObj):
-        logger.info ('rbdloop cfg = %s' % testcfg)
-        self.poolname = 'cbt-kernelrbdfio'
-        self.pool_profile = testcfg.get('pool_profile', 'default')
+        super(rbdloop, self).__init__(testcfg, stressTestObj)
+        self.poolname = 'cbt-rbd-stress'
         self.vol_size = testcfg.get('vol_size', 65536)
-        self.stressTestObj = stressTestObj
-        self.cluster = stressTestObj.cluster
 
     def initialize(self):
         self.buildTestTree()  # need test data for source
@@ -134,9 +144,7 @@ class rbdloop(stressloop):
         common.pdsh(settings.getnodes('clients'), 'sudo rbd -p %s rm %s-`hostname -s`' % (self.poolname, self.poolname)).communicate()
 
         # rebuild the pool
-        logger.info ('creating the pool')
-        self.cluster.rmpool(self.poolname, self.pool_profile)
-        self.cluster.mkpool(self.poolname, self.pool_profile)
+        self.rebuildPool()
 
         # now create, map and mount the new img
         logger.info ('creating mapping and mounting rbd image')
@@ -161,8 +169,10 @@ def exitKillSubprocs(signum, frame):
         p.kill()
     sys.exit()
 
-class StressTest(Benchmark):
 
+# this is the higher level "benchmark" that is called from the outer cbt framework
+# it spawns as many of the stressloop subprocesses as required.
+class StressTest(Benchmark):
     def __init__(self, cluster, config):
         super(StressTest, self).__init__(cluster, config)
         dir_path = '/stress-output'
