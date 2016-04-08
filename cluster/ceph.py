@@ -584,6 +584,24 @@ class RecoveryTestThread(threading.Thread):
         self.maxhealthtries = 60
         self.health_checklist = ["degraded", "peering", "recovery_wait", "stuck", "inactive", "unclean", "recovery"]
         self.ceph_cmd = self.cluster.ceph_cmd
+        self.osdList = self.config.get("osds", [])   # raw osd list
+        self.recoveryStep = self.config.get("recoveryStep", 0)   # whether we should step thru raw list
+        self.nextOsdStepIndex = 0
+        self.setNextCurOsds()
+
+    def setNextCurOsds(self):
+        # set curOsds to list containing required number of osds from next index in list
+        # if step not set, use all osdList
+        if self.recoveryStep == 0:
+            self.curOsds = self.osdList
+        else:
+            curosds = []
+            for n in xrange(self.recoveryStep):
+                curosds.append(self.osdList[self.nextOsdStepIndex])
+                self.nextOsdStepIndex = (self.nextOsdStepIndex + 1) % len(self.osdList)
+            self.curOsds = curosds
+            lcmd = self.logcmd("Setting the curOsd list to %s" % (self.curOsds))
+            common.pdsh(settings.getnodes('head'), lcmd).communicate()
 
     def logcmd(self, message):
         return 'echo "[`date`] %s" >> %s/recovery.log' % (message, self.config.get('run_dir'))
@@ -597,7 +615,7 @@ class RecoveryTestThread(threading.Thread):
         self.state = 'markdown'
 
     def markdown(self):
-        for osdnum in self.config.get('osds'):
+        for osdnum in self.curOsds:
             lcmd = self.logcmd("Marking OSD %s down." % osdnum)
             common.pdsh(settings.getnodes('head'), '%s -c %s osd down %s;%s' % (self.ceph_cmd, self.cluster.tmp_conf, osdnum, lcmd)).communicate()
             lcmd = self.logcmd("Marking OSD %s out." % osdnum)
@@ -621,7 +639,7 @@ class RecoveryTestThread(threading.Thread):
 
         lcmd = self.logcmd("Unsetting the ceph osd noup flag")
         common.pdsh(settings.getnodes('head'), '%s -c %s osd unset noup;%s' % (self.ceph_cmd, self.cluster.tmp_conf, lcmd)).communicate()
-        for osdnum in self.config.get('osds'):
+        for osdnum in self.curOsds:
             lcmd = self.logcmd("Marking OSD %s up." % osdnum)
             common.pdsh(settings.getnodes('head'), '%s -c %s osd up %s;%s' % (self.ceph_cmd, self.cluster.tmp_conf, osdnum, lcmd)).communicate()
             lcmd = self.logcmd("Marking OSD %s in." % osdnum)
@@ -662,6 +680,9 @@ class RecoveryTestThread(threading.Thread):
             self.inhealthtries = 0
 
             common.pdsh(settings.getnodes('head'), self.logcmd('Cluster is healthy, but repeat is set.  Moving to "markdown" state.')).communicate()
+            # advance the currentOsds list if specified
+            self.setNextCurOsds()
+
             self.state = "markdown"
             return
 
