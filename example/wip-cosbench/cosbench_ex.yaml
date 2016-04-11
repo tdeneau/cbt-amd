@@ -13,7 +13,11 @@ cluster:
   rgws: ["inf1", "inf2", "inf3"]
   osds_per_node: 1
   fs: 'xfs'
+<<<<<<< HEAD
   mkfs_opts: '-f -i size=2048'
+=======
+  mkfs_opts: '-f -i size=2048 -n size=64k'
+>>>>>>> add_cephfs_support
   mount_opts: '-o inode64,noatime,logbsize=256k'
   conf_file: '/home/cbt/cbt/runs/test2.ceph.conf'
   iterations: 1
