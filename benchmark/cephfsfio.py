@@ -66,7 +66,7 @@ class CephFsFio(Benchmark):
 
         logger.info('Pausing for 60s for idle monitoring.')
         monitoring.start("%s/idle_monitoring" % self.run_dir)
-        time.sleep(1)
+        time.sleep(60)
         monitoring.stop()
 
         common.sync_files('%s/*' % self.run_dir, self.out_dir)
