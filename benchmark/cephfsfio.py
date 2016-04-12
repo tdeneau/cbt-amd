@@ -66,7 +66,7 @@ class CephFsFio(Benchmark):
 
         logger.info('Pausing for 60s for idle monitoring.')
         monitoring.start("%s/idle_monitoring" % self.run_dir)
-        time.sleep(60)
+        time.sleep(1)
         monitoring.stop()
 
         common.sync_files('%s/*' % self.run_dir, self.out_dir)
@@ -128,7 +128,8 @@ class CephFsFio(Benchmark):
         if self.log_avg_msec is not None:
             fio_cmd += ' --log_avg_msec=%s' % self.log_avg_msec
         logger.info('Running cephfs fio %s test.', self.mode)
-        common.pdsh(settings.getnodes('clients'), fio_cmd).communicate()
+        stdout, stderr = common.pdsh(settings.getnodes('clients'), fio_cmd).communicate()
+        print stdout, stderr
 
         # If we were doing recovery, wait until it's done.
         if 'recovery_test' in self.cluster.config:
@@ -158,11 +159,18 @@ class CephFsFio(Benchmark):
         self.cluster.mkpool(self.datapoolname, self.pool_profile)
         self.cluster.mkpool(self.metadatapoolname, self.pool_profile)
 	stdout, self.adminkeyerror = common.pdsh(settings.getnodes('head'), 'ceph-authtool /tmp/cbt/ceph/keyring -p').communicate()
-	self.adminkey = stdout.split(':')[1]
-	self.adminkey = self.adminkey.strip()
-	common.pdsh(settings.getnodes('head'), 'ceph -c /tmp/cbt/ceph/ceph.conf fs new testfs %s %s' % (self.metadatapoolname, self.datapoolname)).communicate()
+        # for now not using authentication
+	#self.adminkey = stdout.split(':')[1]
+	#self.adminkey = self.adminkey.strip()
+	stdout, stderr = common.pdsh(settings.getnodes('head'), 'ceph fs new testfs %s %s' % (self.metadatapoolname, self.datapoolname)).communicate()
+        print stdout, stderr
+
         common.pdsh(settings.getnodes('clients'), 'sudo mkdir -p -m0755 -- %s/cbt-kernelcephfsfio-`hostname -s`' % self.cluster.mnt_dir).communicate()
-        common.pdsh(settings.getnodes('clients'), 'sudo mount -t ceph %s %s/cbt-kernelcephfsfio-`hostname -s` -o name=admin,secret=%s' % (self.monaddr_mountpoint, self.cluster.mnt_dir, self.adminkey)).communicate()
+        # for now not using authentication
+        # common.pdsh(settings.getnodes('clients'), 'sudo mount -t ceph %s %s/cbt-kernelcephfsfio-`hostname -s` -o name=admin,secret=%s' % (self.monaddr_mountpoint, self.cluster.mnt_dir, self.adminkey)).communicate()
+        stdout, stderr = common.pdsh(settings.getnodes('clients'), 'sudo mount -t ceph %s %s/cbt-kernelcephfsfio-`hostname -s` ' % (self.monaddr_mountpoint, self.cluster.mnt_dir)).communicate()
+        print stdout, stderr
+
         monitoring.stop()
 
     def recovery_callback(self): 
