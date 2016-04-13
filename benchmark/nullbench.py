@@ -4,6 +4,7 @@ import settings
 import monitoring
 import os
 import logging
+import time
 
 from cluster.ceph import Ceph
 from benchmark import Benchmark
@@ -14,6 +15,7 @@ class Nullbench(Benchmark):
 
     def __init__(self, cluster, config):
         super(Nullbench, self).__init__(cluster, config)
+        self.recoveryFinished = False
 
     def initialize(self): 
         super(Nullbench, self).initialize()
@@ -30,9 +32,13 @@ class Nullbench(Benchmark):
 
     def run(self):
         super(Nullbench, self).run()
-        
+        if 'recovery_test' in self.cluster.config:
+            logger.info('Nullbench waiting for recovery_test to finish')
+            while not self.recoveryFinished:
+                time.sleep(5)
+
     def recovery_callback(self): 
-        pass
+        self.recoveryFinished = True
 
     def __str__(self):
         super(Nullbench, self).__str__()

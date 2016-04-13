@@ -627,6 +627,7 @@ class RecoveryTestThread(threading.Thread):
         self.recoveryStep = self.config.get("recoveryStep", 0)   # whether we should step thru raw list
         self.nextOsdStepIndex = 0
         self.setNextCurOsds()
+        self.daemon = True
 
     def setNextCurOsds(self):
         # set curOsds to list containing required number of osds from next index in list
