@@ -14,28 +14,27 @@ from AsyncFileReader import *
 from cluster.ceph import Ceph
 from benchmark import Benchmark
 
-logger = logging.getLogger('cbt')
+import cephfsfio
 
-testTreeDir = '/tmp/test-tree'
-populateCmd = '/tmp/cbt/populate.sh'
-tmpCbt = '/tmp/cbt'
-s3LoopCmd   = 's3-loop.sh'
-radosLoopCmd = 'rados-treediff-loop.sh'
-rbdLoopCmd = 'rbd-loop.sh'
+logger = logging.getLogger('cbt')
 
 class stressloop(object):
     def __init__(self, testcfg, stressTestObj):
         self.stressTestObj = stressTestObj
         self.cluster = stressTestObj.cluster
         self.pool_profile = testcfg.get('pool_profile', 'default')
+        self.tmpCbt = '/tmp/cbt'
+        self.testTreeDir = '/tmp/test-tree'
+        self.fsLoopCmd = 'fs-loop.sh'
+        self.populateCmd = 'populate.sh'
         logger.info('%s cfg = %s' % (self.__class__.__name__, testcfg))
 
 
     def buildTestTree(self):
-        common.pdcp(settings.getnodes('clients'), '', './populate.sh', populateCmd)
+        remotePopulateCmd = self.makeRemoteCmd('./%s' % self.populateCmd)
         # saw cases where we needed a pause here
         time.sleep(2) 
-        stdout, stderr = common.pdsh(settings.getnodes('clients'), 'bash %s %s' % (populateCmd, testTreeDir)).communicate()
+        stdout, stderr = common.pdsh(settings.getnodes('clients'), 'bash %s %s' % (remotePopulateCmd, self.testTreeDir)).communicate()
         logger.info ('\n%s %s' % (stdout, stderr))
 
     def initialize(self):
@@ -44,12 +43,18 @@ class stressloop(object):
     def run(self, id, run_dir):
         pass
 
-    def rebuildPool(self):
+    def rebuildPool(self, poolname = None):
         # rebuild the pool
-        logger.info ('creating the pool %s' % self.poolname)
-        self.cluster.rmpool(self.poolname, self.pool_profile)
-        self.cluster.mkpool(self.poolname, self.pool_profile)
+        if poolname == None:
+            poolname = self.poolname
+        logger.info ('creating the pool %s' % poolname)
+        self.cluster.rmpool(poolname, self.pool_profile)
+        self.cluster.mkpool(poolname, self.pool_profile)
 
+    def makeRemoteCmd(self, localCmd):
+        remoteCmd = '%s/%s' % (self.tmpCbt, localCmd)
+        common.pdcp(settings.getnodes('clients'), '', localCmd, remoteCmd)
+        return remoteCmd
 
 
 class s3loop(stressloop):
@@ -57,6 +62,7 @@ class s3loop(stressloop):
         super(s3loop, self).__init__(testcfg, stressTestObj)
         self.gw_host = testcfg.get('gw_host', 'localhost')
         self.gw_port = testcfg.get('gw_port', 7480)
+        self.s3LoopCmd = 's3-loop.sh'
 
     def initialize(self):
         self.buildTestTree()  # need test data for srcdir
@@ -68,15 +74,13 @@ class s3loop(stressloop):
 
     def run(self, id, run_dir):
         outfile = '%s/stress-s3loop-%d.out ' % (run_dir, id)
-        localS3LoopCmd = '../%s' % s3LoopCmd
-        remoteS3LoopCmd = '%s/%s' % (tmpCbt, s3LoopCmd)
-        common.pdcp(settings.getnodes('clients'), '', localS3LoopCmd, remoteS3LoopCmd)
+        remoteS3LoopCmd = self.makeRemoteCmd('../%s' % self.s3LoopCmd)
         # saw cases where we needed a pause here
         time.sleep(2) 
         pset = []
         for clientnode in self.stressTestObj.cluster.config.get('clients', []):
             print 'spawn on client ', clientnode
-            cmdargs = ['ssh', clientnode, '/usr/bin/bash', remoteS3LoopCmd, '%s:%s' % (self.gw_host, self.gw_port), testTreeDir, str(id), '2>&1|tee', outfile]
+            cmdargs = ['ssh', clientnode, '/usr/bin/bash', remoteS3LoopCmd, '%s:%s' % (self.gw_host, self.gw_port), self.testTreeDir, str(id), '2>&1|tee', outfile]
             p = common.popen(cmdargs)
             pset.append(p)
         return pset
@@ -86,6 +90,7 @@ class radosloop(stressloop):
         super(radosloop, self).__init__(testcfg, stressTestObj)
         self.poolname = 'cbt-rados-stress'
         self.threads = testcfg.get('threads', 8)
+        self.radosLoopCmd = 'rados-treediff-loop.sh'
 
     def initialize(self):
         self.buildTestTree()  # need test data for source
@@ -93,26 +98,25 @@ class radosloop(stressloop):
 
     def run(self, id, run_dir):
         outfile = '%s/stress-radosloop-%d.out ' % (run_dir, id)
-        localRadosLoopCmd = '../%s' % radosLoopCmd
-        remoteRadosLoopCmd = '%s/%s' % (tmpCbt, radosLoopCmd)
-        common.pdcp(settings.getnodes('clients'), '', localRadosLoopCmd, remoteRadosLoopCmd)
+        remoteRadosLoopCmd = self.makeRemoteCmd('../%s' % self.radosLoopCmd)
         # saw cases where we needed a pause here
         time.sleep(2) 
         pset = []
         for clientnode in self.stressTestObj.cluster.config.get('clients', []):
             print 'spawn on client ', clientnode
-            cmdargs = ['ssh', clientnode, '/usr/bin/bash', remoteRadosLoopCmd, self.poolname, testTreeDir, str(id), str(self.threads), '2>&1|tee', outfile]
+            cmdargs = ['ssh', clientnode, '/usr/bin/bash', remoteRadosLoopCmd, self.poolname, self.testTreeDir, str(id), str(self.threads), '2>&1|tee', outfile]
             p = common.popen(cmdargs)
             pset.append(p)
         return pset
 
 
-# dummy for now
 class rbdloop(stressloop):
     def __init__(self, testcfg, stressTestObj):
         super(rbdloop, self).__init__(testcfg, stressTestObj)
         self.poolname = 'cbt-rbd-stress'
         self.vol_size = testcfg.get('vol_size', 65536)
+        self.rbdLoopCmd = 'rbd-loop.sh'
+
 
     def initialize(self):
         self.buildTestTree()  # need test data for source
@@ -121,16 +125,14 @@ class rbdloop(stressloop):
 
     def run(self, id, run_dir):
         outfile = '%s/stress-rbdloop-%d.out ' % (run_dir, id)
-        localRbdLoopCmd = '../%s' % rbdLoopCmd
-        remoteRbdLoopCmd = '%s/%s' % (tmpCbt, rbdLoopCmd)
-        common.pdcp(settings.getnodes('clients'), '', localRbdLoopCmd, remoteRbdLoopCmd)
+        remoteFsLoopCmd = self.makeRemoteCmd('../%s' % self.fsLoopCmd)
         # saw cases where we needed a pause here
         time.sleep(2) 
         pset = []
         for clientnode in self.stressTestObj.cluster.config.get('clients', []):
             print 'spawn on client ', clientnode
-            cmdargs = ['ssh', clientnode, '/usr/bin/bash', remoteRbdLoopCmd, '%s/%s-`hostname -s`' % (self.cluster.mnt_dir, self.poolname),
-                       testTreeDir, str(id), '2>&1|tee', outfile]
+            cmdargs = ['ssh', clientnode, 'bash', remoteFsLoopCmd, '%s/%s-`hostname -s`' % (self.cluster.mnt_dir, self.poolname),
+                       self.testTreeDir, str(id), 'rbd', '2>&1|tee', outfile]
             p = common.popen(cmdargs)
             pset.append(p)
         return pset
@@ -156,6 +158,37 @@ class rbdloop(stressloop):
         # print status
         stdout,stderr = common.pdsh(settings.getnodes('clients'), 'rbd showmapped').communicate()
         logger.info ('\n%s %s' % (stdout, stderr))
+
+
+#cephfsloop inherits from cephfsfio just to get the fs mkimages_internal stuff
+class cephfsloop(stressloop, cephfsfio.CephFsFio):
+    def __init__(self, testcfg, stressTestObj):
+        stressloop.__init__(self, testcfg, stressTestObj)
+        self.monaddr_mountpoint = testcfg.get('monaddr_mountpoint', None)
+        self.datapoolname = "cbt-kernelcephfsfiodata"
+        self.metadatapoolname = "cbt-kernelcephfsfiometadata"
+        
+    def initialize(self):
+        self.buildTestTree()  # need test data for source
+        # create cephfs mapping
+        # self.mkimages_internal()
+
+    def run(self, id, run_dir):
+        outfile = '%s/stress-cephfsloop-%d.out ' % (run_dir, id)
+        remoteFsLoopCmd = self.makeRemoteCmd('../%s' % self.fsLoopCmd)
+        # saw cases where we needed a pause here
+        time.sleep(2) 
+        pset = []
+        for clientnode in self.stressTestObj.cluster.config.get('clients', []):
+            print 'spawn on client ', clientnode
+            cmdargs = ['ssh', clientnode, 'bash', remoteFsLoopCmd, '%s/cbt-kernelcephfsfio-`hostname -s`' % (self.cluster.mnt_dir), self.testTreeDir, str(id), 'cephfs', '2>&1|tee', outfile]
+            p = common.popen(cmdargs)
+            pset.append(p)
+        return pset
+
+
+    def __str__(self):
+        return "cephfsloop"
 
 
 # global ps used by KillSubprocs

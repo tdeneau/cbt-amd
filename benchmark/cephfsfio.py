@@ -154,6 +154,11 @@ class CephFsFio(Benchmark):
 
     def mkimages(self):
         monitoring.start("%s/pool_monitoring" % self.run_dir)
+        self.mkimages_internal()
+        monitoring.stop()
+
+    # this can be called from other classes
+    def mkimages_internal(self):
         self.cluster.rmpool(self.datapoolname, self.pool_profile)
         self.cluster.rmpool(self.metadatapoolname, self.pool_profile)
         self.cluster.mkpool(self.datapoolname, self.pool_profile)
@@ -170,8 +175,6 @@ class CephFsFio(Benchmark):
         # common.pdsh(settings.getnodes('clients'), 'sudo mount -t ceph %s %s/cbt-kernelcephfsfio-`hostname -s` -o name=admin,secret=%s' % (self.monaddr_mountpoint, self.cluster.mnt_dir, self.adminkey)).communicate()
         stdout, stderr = common.pdsh(settings.getnodes('clients'), 'sudo mount -t ceph %s %s/cbt-kernelcephfsfio-`hostname -s` ' % (self.monaddr_mountpoint, self.cluster.mnt_dir)).communicate()
         print stdout, stderr
-
-        monitoring.stop()
 
     def recovery_callback(self): 
         common.pdsh(settings.getnodes('clients'), 'sudo killall -9 fio').communicate()
