@@ -171,7 +171,7 @@ class cephfsloop(stressloop, cephfsfio.CephFsFio):
     def initialize(self):
         self.buildTestTree()  # need test data for source
         # create cephfs mapping
-        # self.mkimages_internal()
+        self.mkimages_internal()
 
     def run(self, id, run_dir):
         outfile = '%s/stress-cephfsloop-%d.out ' % (run_dir, id)
@@ -189,6 +189,67 @@ class cephfsloop(stressloop, cephfsfio.CephFsFio):
 
     def __str__(self):
         return "cephfsloop"
+
+
+#kvmrbdloop
+class kvmrbdloop(stressloop):
+    def __init__(self, testcfg, stressTestObj):
+        stressloop.__init__(self, testcfg, stressTestObj)
+        self.numvms = testcfg.get('num_vms', 1)
+        self.createVmScript = 'create-rbd-vms.py'
+        self.loopOnVmsCmd = 'loop-on-vms.sh'
+        self.poolname = 'libvirt-pool'
+        # following usually set true only for quicker debugging
+        self.skipImageSetup = testcfg.get('skip_image_setup', False)
+        self.skipVmCreation = testcfg.get('skip_vm_creation', False)
+
+    def initialize(self):
+
+        # first rebuild the pool
+        if (self.skipImageSetup or self.skipVmCreation):
+            pass
+        else:
+            self.rebuildPool()
+
+        # to initialize, we need to create the vms on the client machines
+        # we do this thru a separate python script
+        remoteCreateVmScript = self.makeRemoteCmd('./%s' % self.createVmScript)
+        createVmScriptFlags = '-n %d' % self.numvms
+        if self.skipImageSetup:
+            createVmScriptFlags += ' -I'
+        if self.skipVmCreation:
+            createVmScriptFlags += ' -V'
+            
+        # run the script
+        stdout, stderr = common.pdsh(settings.getnodes('clients'), 'python %s %s' % (remoteCreateVmScript, createVmScriptFlags)).communicate()
+        logger.info('stdout: ' + stdout)
+        logger.info('stderr: ' + stderr)
+
+
+        # on completion each client should have a file containing the vm ipaddrs
+        # and vms are set up for passwordless ssh
+        # need some more scripts down on the clients (from which they will then get pushed to the vms)
+        self.remoteRunOnVmsCmd = self.makeRemoteCmd('./%s' % self.loopOnVmsCmd)
+        self.makeRemoteCmd('./%s' % self.populateCmd)
+        self.makeRemoteCmd('../%s' % self.fsLoopCmd)
+        # note: for this we do not need test tree on client, but client will tell vms to build test-tree
+
+    def run(self, id, run_dir):
+        outfile = '%s/stress-kvmrbdloop-%d.out ' % (run_dir, id)
+        # saw cases where we needed a pause here
+        time.sleep(2) 
+        pset = []
+        for clientnode in self.stressTestObj.cluster.config.get('clients', []):
+            print 'spawn loop-on-vms.sh on client ', clientnode
+            cmdargs = ['ssh', clientnode, 'bash', self.remoteRunOnVmsCmd, '2>&1|tee', outfile]
+            p = common.popen(cmdargs)
+            pset.append(p)
+        return pset
+
+
+    def __str__(self):
+        return "kvmrbdloop"
+
 
 
 # global ps used by KillSubprocs
