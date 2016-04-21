@@ -195,7 +195,7 @@ class cephfsloop(stressloop, cephfsfio.CephFsFio):
 class kvmrbdloop(stressloop):
     def __init__(self, testcfg, stressTestObj):
         stressloop.__init__(self, testcfg, stressTestObj)
-        self.numvms = testcfg.get('num_vms', 1)
+        self.vms_per_client = testcfg.get('vms_per_client', 1)
         self.createVmScript = 'create-rbd-vms.py'
         self.loopOnVmsCmd = 'loop-on-vms.sh'
         self.poolname = 'libvirt-pool'
@@ -214,16 +214,32 @@ class kvmrbdloop(stressloop):
         # to initialize, we need to create the vms on the client machines
         # we do this thru a separate python script
         remoteCreateVmScript = self.makeRemoteCmd('./%s' % self.createVmScript)
-        createVmScriptFlags = '-n %d' % self.numvms
+        createVmScriptFlags = '-n %d' % self.vms_per_client
         if self.skipImageSetup:
             createVmScriptFlags += ' -I'
         if self.skipVmCreation:
             createVmScriptFlags += ' -V'
             
         # run the script
-        stdout, stderr = common.pdsh(settings.getnodes('clients'), 'python %s %s' % (remoteCreateVmScript, createVmScriptFlags)).communicate()
-        logger.info('stdout: ' + stdout)
-        logger.info('stderr: ' + stderr)
+        logger.info ('Creating %d VMs, this may take a while' % self.vms_per_client)
+        proc = common.pdsh(settings.getnodes('clients'), 'python %s %s' % (remoteCreateVmScript, createVmScriptFlags))
+        if True:
+            stdout_queue = Queue.Queue()
+            stdout_rdr = AsyncFileReader(proc.stdout, stdout_queue)
+            stdout_rdr.start()
+            stderr_queue = Queue.Queue()
+            stderr_rdr = AsyncFileReader(proc.stderr, stderr_queue)
+            stderr_rdr.start()
+            while not stdout_rdr.eof():
+                while not stdout_rdr.queue().empty():
+                    line = stdout_rdr.queue().get()
+                    print line,
+                    while not stderr_rdr.queue().empty():
+                        line = stderr_rdr.queue().get()
+                        print line,
+                        time.sleep(2)
+
+
 
 
         # on completion each client should have a file containing the vm ipaddrs
@@ -240,7 +256,7 @@ class kvmrbdloop(stressloop):
         time.sleep(2) 
         pset = []
         for clientnode in self.stressTestObj.cluster.config.get('clients', []):
-            print 'spawn loop-on-vms.sh on client ', clientnode
+            logger.info('spawn loop-on-vms.sh on client %s' % clientnode)
             cmdargs = ['ssh', clientnode, 'bash', self.remoteRunOnVmsCmd, '2>&1|tee', outfile]
             p = common.popen(cmdargs)
             pset.append(p)
