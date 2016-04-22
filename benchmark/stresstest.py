@@ -18,6 +18,34 @@ import cephfsfio
 
 logger = logging.getLogger('cbt')
 
+# called with list of async readers and length of time to run (0 = forever)
+def poll_readers(readers, run_minutes):
+    run_secs = run_minutes * 60
+    start_time = time.time()
+    while len(readers) > 0:
+        for rdr in readers:
+            if rdr.eof():
+                logger.info('% reached EOF' % rdr)
+                readers.remove(rdr)
+                break
+            else:
+                while not rdr.queue().empty():
+                    line = rdr.queue().get()
+                    print line,
+        time.sleep(2)
+        elapsed_secs = time.time() - start_time
+        if run_secs != 0 and elapsed_secs >= run_secs:
+            logger.info ('Loop stopped after %d minutes' % (run_minutes))
+            break
+    # end of while loop            
+    return
+
+def getReaderForProc(proc):
+    stdout_queue = Queue.Queue()
+    stdout_reader = AsyncFileReader(proc.stdout, stdout_queue)
+    stdout_reader.start()
+    return stdout_reader
+
 class stressloop(object):
     def __init__(self, testcfg, stressTestObj):
         self.stressTestObj = stressTestObj
@@ -220,35 +248,26 @@ class kvmrbdloop(stressloop):
         if self.skipVmCreation:
             createVmScriptFlags += ' -V'
             
-        # run the script
-        logger.info ('Creating %d VMs, this may take a while' % self.vms_per_client)
-        proc = common.pdsh(settings.getnodes('clients'), 'python %s %s' % (remoteCreateVmScript, createVmScriptFlags))
-        if True:
-            stdout_queue = Queue.Queue()
-            stdout_rdr = AsyncFileReader(proc.stdout, stdout_queue)
-            stdout_rdr.start()
-            stderr_queue = Queue.Queue()
-            stderr_rdr = AsyncFileReader(proc.stderr, stderr_queue)
-            stderr_rdr.start()
-            while not stdout_rdr.eof():
-                while not stdout_rdr.queue().empty():
-                    line = stdout_rdr.queue().get()
-                    print line,
-                    while not stderr_rdr.queue().empty():
-                        line = stderr_rdr.queue().get()
-                        print line,
-                        time.sleep(2)
+        # run the vm creation script on each client
+        logger.info ('Creating %d VMs on each client, this may take a while' % self.vms_per_client)
+        myReaders = []
+        pset = []
+        for clientnode in self.stressTestObj.cluster.config.get('clients', []):
+            cmdargs = ['ssh', clientnode, 'python', remoteCreateVmScript, createVmScriptFlags, '2>&1']
+            p = common.popen(cmdargs)
+            pset.append(p)
+            myReaders.append(getReaderForProc(p))
 
-
-
+        # poll readers and show output
+        poll_readers(myReaders, 0)
 
         # on completion each client should have a file containing the vm ipaddrs
         # and vms are set up for passwordless ssh
-        # need some more scripts down on the clients (from which they will then get pushed to the vms)
+        # we need a few more scripts down on the clients (from which they will then get pushed to the vms)
         self.remoteRunOnVmsCmd = self.makeRemoteCmd('./%s' % self.loopOnVmsCmd)
         self.makeRemoteCmd('./%s' % self.populateCmd)
         self.makeRemoteCmd('../%s' % self.fsLoopCmd)
-        # note: for this we do not need test tree on client, but client will tell vms to build test-tree
+        # note: for this test, we do not need test tree on client, but client will tell vms to build test-tree
 
     def run(self, id, run_dir):
         outfile = '%s/stress-kvmrbdloop-%d.out ' % (run_dir, id)
@@ -258,8 +277,8 @@ class kvmrbdloop(stressloop):
         for clientnode in self.stressTestObj.cluster.config.get('clients', []):
             logger.info('spawn loop-on-vms.sh on client %s' % clientnode)
             cmdargs = ['ssh', clientnode, 'bash', self.remoteRunOnVmsCmd, '2>&1|tee', outfile]
-            p = common.popen(cmdargs)
-            pset.append(p)
+            proc = common.popen(cmdargs)
+            pset.append(proc)
         return pset
 
 
@@ -288,6 +307,7 @@ class StressTest(Benchmark):
         dir_path = '/stress-output'
         self.run_dir = self.run_dir + dir_path
         self.out_dir = self.archive_dir +  dir_path
+        self.run_minutes = config.get('run_minutes', 0)
         self.config = config
         logger.info('out_dir is now %s, while run_dir is %s' % (self.out_dir, self.run_dir))
 
@@ -348,24 +368,11 @@ class StressTest(Benchmark):
 
         # create async readers for each subprocess
         for proc in ps:
-            stdout_queue = Queue.Queue()
-            stdout_reader = AsyncFileReader(proc.stdout, stdout_queue)
-            stdout_reader.start()
-            readers.append(stdout_reader)
+            readers.append(getReaderForProc(proc))
 
-        # wait for stress tests to finish (if ever) and meanwhile show stdout
-        while len(readers) > 0:
-            for rdr in readers:
-                if rdr.eof():
-                    print rdr, ' reached EOF'
-                    readers.remove(rdr)
-                    break
-                else:
-                    while not rdr.queue().empty():
-                        line = rdr.queue().get()
-                        print line,
-            time.sleep(2)
-        # end of while loop            
+        # wait for stress tests to finish and meanwhile show stdout
+        # poll loop will finish when self.run_minutes elapsed (0 means forever)
+        poll_readers(readers, self.run_minutes)
 
         common.sync_files('%s/*' % self.run_dir, self.out_dir)
 
