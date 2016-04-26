@@ -298,22 +298,26 @@ class Ceph(Cluster):
                 common.pdsh(monhost, 'sudo %s' % cmd).communicate()
 
     def make_mdss(self):
-        # Build and distribute the keyring
-        common.pdsh(settings.getnodes('head'), 'ceph-authtool --gen-key --name=mds. %s --cap mds \'allow *\'' % self.keyring_fn).communicate()
-        # common.pdsh(settings.getnodes('head'), 'ceph-authtool --gen-key --name=client.admin --set-uid=0 --cap mon \'allow *\' --cap osd \'allow *\' --cap mds allow %s' % self.keyring_fn).communicate()
-        common.rscp(settings.getnodes('head'), self.keyring_fn, '%s.tmp' % self.keyring_fn).communicate()
-        common.pdcp(settings.getnodes('mons', 'osds', 'rgws', 'mds'), '', '%s.tmp' % self.keyring_fn, self.keyring_fn).communicate()
-
         # Build the monmap, retrieve it, and distribute it
         mdss = settings.getnodes('mdss').split(',')
         mdshosts = settings.cluster.get('mdss')
         logger.info(mdshosts)
+
+        # Build and distribute the keyring
+        for mdshost, mdss in mdshosts.iteritems():
+            for mds, addr in mdss.iteritems():
+                common.pdsh(settings.getnodes('head'), 'ceph-authtool --gen-key --name=mds.%s %s --cap mds \'allow \' --cap osd \'allow *\'  --cap mon \'allow rwx\'' % (mds, self.keyring_fn)).communicate()
+                # common.pdsh(settings.getnodes('head'), 'ceph-authtool --gen-key --name=client.admin --set-uid=0 --cap mon \'allow *\' --cap osd \'allow *\' --cap mds allow %s' % self.keyring_fn).communicate()
+
+        common.rscp(settings.getnodes('head'), self.keyring_fn, '%s.tmp' % self.keyring_fn).communicate()
+        common.pdcp(settings.getnodes('mons', 'osds', 'rgws', 'mds'), '', '%s.tmp' % self.keyring_fn, self.keyring_fn).communicate()
 
         # Build the ceph-mdss
         user = settings.cluster.get('user')
         for mdshost, mdss in mdshosts.iteritems():
             if user:
                 mdshost = '%s@%s' % (user, mdshost)
+            # TODO: I'm not sure we really need these /tmp/cbt/ceph/mds.$id keyrings
             for mds, addr in mdss.iteritems():
                 common.pdsh(mdshost, 'sudo rm -rf %s/mds.%s' % (self.tmp_dir, mds)).communicate()
                 common.pdsh(mdshost, 'mkdir -p %s/mds.%s' % (self.tmp_dir, mds)).communicate()
