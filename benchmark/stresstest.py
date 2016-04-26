@@ -292,10 +292,14 @@ ps = []
 readers = []
 original_sigint = None
 
-def exitKillSubprocs(signum, frame):
+def killSubprocs(message):
     for p in ps:
-        print 'in Ctrl-C handler, killing subprocess ', p.pid
+        print message, 'in Ctrl-C handler, killing subprocess ', p.pid
         p.kill()
+
+
+def exitKillSubprocs(signum, frame):
+    killSubprocs('in Ctrl-C handler,')
     sys.exit()
 
 
@@ -375,6 +379,7 @@ class StressTest(Benchmark):
         poll_readers(readers, self.run_minutes)
 
         common.sync_files('%s/*' % self.run_dir, self.out_dir)
+        killSubprocs(' ')
 
     def recovery_callback(self): 
         logger.info('recovery thread called dummy recover_callback')

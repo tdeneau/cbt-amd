@@ -43,7 +43,7 @@ class OsdThread(threading.Thread):
             ceph_conf = self.cl_obj.tmp_conf
             phost = sshtarget(settings.cluster.get('user'), self.host)
             common.pdsh(phost, 'sudo %s -c %s osd crush add osd.%d 1.0 host=%s rack=localrack root=default' % (self.cl_obj.ceph_cmd, ceph_conf, self.osdnum, self.host)).communicate()
-            cmd='ulimit -n 16384 && ulimit -c unlimited && exec %s -c %s -i %d --mkfs --mkkey --osd-uuid %s' % (self.cl_obj.ceph_osd_cmd, ceph_conf, self.osdnum, self.osduuid)
+            cmd='ulimit -n 16384 && ulimit -c unlimited && exec %s -c %s -i %d --mkfs --mkkey --osd-uuid %s --keyring %s' % (self.cl_obj.ceph_osd_cmd, ceph_conf, self.osdnum, self.osduuid, key_fn)
             common.pdsh(phost, 'sudo sh -c "%s"' % cmd).communicate()
             common.pdsh(phost, 'sudo %s -c %s -i %s auth add osd.%d osd "allow *" mon "allow profile osd"' % (self.cl_obj.ceph_cmd, ceph_conf, key_fn, self.osdnum)).communicate()
 
@@ -88,7 +88,7 @@ class Ceph(Cluster):
         self.pid_dir = config.get('pid_dir', "%s/pid" % self.tmp_dir)
         self.core_dir = config.get('core_dir', "%s/core" % self.tmp_dir)
         self.monitoring_dir = "%s/monitoring" % self.tmp_dir
-        self.keyring_fn = "%s/keyring" % self.tmp_dir
+        self.keyring_fn = "/etc/ceph/keyring"
         self.osdmap_fn = "%s/osdmap" % self.tmp_dir
         self.monmap_fn = "%s/monmap" % self.tmp_dir
         self.use_existing = config.get('use_existing', True)
@@ -256,7 +256,7 @@ class Ceph(Cluster):
     def make_mons(self):
         # Build and distribute the keyring
         common.pdsh(settings.getnodes('head'), 'ceph-authtool --create-keyring --gen-key --name=mon. %s --cap mon \'allow *\'' % self.keyring_fn).communicate()
-        common.pdsh(settings.getnodes('head'), 'ceph-authtool --gen-key --name=client.admin --set-uid=0 --cap mon \'allow *\' --cap osd \'allow *\' --cap mds allow %s' % self.keyring_fn).communicate()
+        common.pdsh(settings.getnodes('head'), 'ceph-authtool --gen-key --name=client.admin --set-uid=0 --cap mon \'allow *\' --cap osd \'allow *\' --cap mds \'allow *\' %s' % self.keyring_fn).communicate()
         common.rscp(settings.getnodes('head'), self.keyring_fn, '%s.tmp' % self.keyring_fn).communicate()
         common.pdcp(settings.getnodes('mons', 'osds', 'rgws', 'mds'), '', '%s.tmp' % self.keyring_fn, self.keyring_fn).communicate()
 
@@ -299,8 +299,8 @@ class Ceph(Cluster):
 
     def make_mdss(self):
         # Build and distribute the keyring
-        common.pdsh(settings.getnodes('head'), 'ceph-authtool --create-keyring --gen-key --name=mds. %s --cap mds \'allow *\'' % self.keyring_fn).communicate()
-        common.pdsh(settings.getnodes('head'), 'ceph-authtool --gen-key --name=client.admin --set-uid=0 --cap mon \'allow *\' --cap osd \'allow *\' --cap mds allow %s' % self.keyring_fn).communicate()
+        common.pdsh(settings.getnodes('head'), 'ceph-authtool --gen-key --name=mds. %s --cap mds \'allow *\'' % self.keyring_fn).communicate()
+        # common.pdsh(settings.getnodes('head'), 'ceph-authtool --gen-key --name=client.admin --set-uid=0 --cap mon \'allow *\' --cap osd \'allow *\' --cap mds allow %s' % self.keyring_fn).communicate()
         common.rscp(settings.getnodes('head'), self.keyring_fn, '%s.tmp' % self.keyring_fn).communicate()
         common.pdcp(settings.getnodes('mons', 'osds', 'rgws', 'mds'), '', '%s.tmp' % self.keyring_fn, self.keyring_fn).communicate()
 
