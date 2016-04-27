@@ -531,7 +531,7 @@ class Ceph(Cluster):
         target_max_objects = profile.get('target_max_objects', None)
         target_max_bytes = profile.get('target_max_bytes', None)
         min_read_recency_for_promote = profile.get('min_read_recency_for_promote', None)
-
+        min_write_recency_for_promote = profile.get('min_write_recency_for_promote', None)
         # Options for prefilling objects
         prefill_objects = profile.get('prefill_objects', 0)
         prefill_object_size = profile.get('prefill_object_size', 0)
@@ -550,6 +550,16 @@ class Ceph(Cluster):
             common.pdsh(settings.getnodes('head'), 'sudo %s -c %s osd pool set %s size %s' % (self.ceph_cmd, self.tmp_conf, name, replication)).communicate()
             common.pdsh(settings.getnodes('head'), 'sudo %s -c %s osd pool set %s min_size %d' % (self.ceph_cmd, self.tmp_conf, name, pool_repl_size-1)).communicate()
 
+        if crush_profile:
+            try:
+              rule_index = int(crush_profile)
+              # set crush profile using the integer 0-based index of crush rule
+              # displayed by: ceph osd crush rule ls
+              ruleset = crush_profile
+            except ValueError as e:
+              ruleset = self.get_ruleset(crush_profile)
+            common.pdsh(settings.getnodes('head'), 'sudo %s -c %s osd pool set %s crush_ruleset %s' % (self.ceph_cmd, self.tmp_conf, name, crush_profile)).communicate()
+
         logger.info('Checking Healh after pool creation.')
         self.check_health()
 
@@ -564,9 +574,6 @@ class Ceph(Cluster):
             common.pdsh(settings.getnodes('head'), 'sudo %s -c %s osd tier cache-mode %s %s' % (self.ceph_cmd, self.tmp_conf, name, cache_mode)).communicate()
             common.pdsh(settings.getnodes('head'), 'sudo %s -c %s osd tier set-overlay %s %s' % (self.ceph_cmd, self.tmp_conf, base_name, name)).communicate()
 
-        if crush_profile:
-            ruleset = self.get_ruleset(crush_profile)
-            common.pdsh(settings.getnodes('head'), 'sudo %s -c %s osd pool set %s crush_ruleset %s' % (self.ceph_cmd, self.tmp_conf, name, ruleset)).communicate()
         if hit_set_type:
             common.pdsh(settings.getnodes('head'), 'sudo %s -c %s osd pool set %s hit_set_type %s' % (self.ceph_cmd, self.tmp_conf, name, hit_set_type)).communicate()
         if hit_set_count:
@@ -579,6 +586,9 @@ class Ceph(Cluster):
             common.pdsh(settings.getnodes('head'), 'sudo %s -c %s osd pool set %s target_max_bytes %s' % (self.ceph_cmd, self.tmp_conf, name, target_max_bytes)).communicate()
         if min_read_recency_for_promote:
             common.pdsh(settings.getnodes('head'), 'sudo %s -c %s osd pool set %s min_read_recency_for_promote %s' % (self.ceph_cmd, self.tmp_conf, name, min_read_recency_for_promote)).communicate()
+        if min_write_recency_for_promote:
+            common.pdsh(settings.getnodes('head'), 'sudo %s -c %s osd pool set %s min_write_recency_for_promote %s' % (self.ceph_cmd, self.tmp_conf, name, min_write_recency_for_promote)).communicate()
+
         logger.info('Final Pool Health Check.')
         self.check_health()
 
