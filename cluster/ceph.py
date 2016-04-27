@@ -306,8 +306,9 @@ class Ceph(Cluster):
         # Build and distribute the keyring
         for mdshost, mdss in mdshosts.iteritems():
             for mds, addr in mdss.iteritems():
-                common.pdsh(settings.getnodes('head'), 'ceph-authtool --gen-key --name=mds.%s %s --cap mds \'allow \' --cap osd \'allow *\'  --cap mon \'allow rwx\'' % (mds, self.keyring_fn)).communicate()
-                # common.pdsh(settings.getnodes('head'), 'ceph-authtool --gen-key --name=client.admin --set-uid=0 --cap mon \'allow *\' --cap osd \'allow *\' --cap mds allow %s' % self.keyring_fn).communicate()
+                mdsauthname = 'mds.%s' % mds
+                common.pdsh(settings.getnodes('head'), 'ceph-authtool --gen-key --name=%s %s --cap mds \'allow \' --cap osd \'allow *\'  --cap mon \'allow rwx\'' % (mdsauthname, self.keyring_fn)).communicate()
+                common.pdsh(settings.getnodes('head'), 'ceph -k %s auth add %s  -i %s' % (self.keyring_fn, mdsauthname, self.keyring_fn) ).communicate()
 
         common.rscp(settings.getnodes('head'), self.keyring_fn, '%s.tmp' % self.keyring_fn).communicate()
         common.pdcp(settings.getnodes('mons', 'osds', 'rgws', 'mds'), '', '%s.tmp' % self.keyring_fn, self.keyring_fn).communicate()
@@ -315,9 +316,10 @@ class Ceph(Cluster):
         # Build the ceph-mdss
         user = settings.cluster.get('user')
         for mdshost, mdss in mdshosts.iteritems():
+            # TODO: I'm not sure we really need these /tmp/cbt/ceph/mds.$id keyrings
+            # since the ceph.conf points elsewhere
             if user:
                 mdshost = '%s@%s' % (user, mdshost)
-            # TODO: I'm not sure we really need these /tmp/cbt/ceph/mds.$id keyrings
             for mds, addr in mdss.iteritems():
                 common.pdsh(mdshost, 'sudo rm -rf %s/mds.%s' % (self.tmp_dir, mds)).communicate()
                 common.pdsh(mdshost, 'mkdir -p %s/mds.%s' % (self.tmp_dir, mds)).communicate()
