@@ -108,7 +108,7 @@ class s3loop(stressloop):
         pset = []
         for clientnode in self.stressTestObj.cluster.config.get('clients', []):
             print 'spawn on client ', clientnode
-            cmdargs = ['ssh', clientnode, '/usr/bin/bash', remoteS3LoopCmd, '%s:%s' % (self.gw_host, self.gw_port), self.testTreeDir, str(id), '2>&1|tee', outfile]
+            cmdargs = ['ssh', clientnode, 'bash', remoteS3LoopCmd, '%s:%s' % (self.gw_host, self.gw_port), self.testTreeDir, str(id), '2>&1|tee', outfile]
             p = common.popen(cmdargs)
             pset.append(p)
         return pset
@@ -132,7 +132,7 @@ class radosloop(stressloop):
         pset = []
         for clientnode in self.stressTestObj.cluster.config.get('clients', []):
             print 'spawn on client ', clientnode
-            cmdargs = ['ssh', clientnode, '/usr/bin/bash', remoteRadosLoopCmd, self.poolname, self.testTreeDir, str(id), str(self.threads), '2>&1|tee', outfile]
+            cmdargs = ['ssh', clientnode, 'bash', remoteRadosLoopCmd, self.poolname, self.testTreeDir, str(id), str(self.threads), '2>&1|tee', outfile]
             p = common.popen(cmdargs)
             pset.append(p)
         return pset

@@ -391,6 +391,8 @@ class Ceph(Cluster):
             thrd.postprocess()
 
     def start_rgw(self):
+        common.pdsh(settings.getnodes('head'), 'ceph-authtool %s --gen-key --name=client.radosgw.gateway  --cap osd \'allow rwx\'  --cap mon \'allow rwx\'' % (self.keyring_fn) ).communicate()
+        common.pdsh(settings.getnodes('head'), 'ceph -k %s auth add client.radosgw.gateway  -i %s' % (self.keyring_fn, self.keyring_fn) ).communicate()
         rgwhosts = settings.cluster.get('rgws', [])
 
         for host in rgwhosts:
