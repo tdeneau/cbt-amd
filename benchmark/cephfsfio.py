@@ -5,6 +5,7 @@ import monitoring
 import os
 import time
 import logging
+import sys
 
 from benchmark import Benchmark
 
@@ -159,22 +160,35 @@ class CephFsFio(Benchmark):
 
     # this can be called from other classes
     def mkimages_internal(self):
+        #  as a testing hack, if the ceph fs testfs already exists, skip this stuff
+	stdout, stderr = common.pdsh(settings.getnodes('head'), 'ceph fs ls').communicate()
+        if stdout.find('name: testfs,') > -1:
+            logger.info('Using existing ceph fs testfs')
+            return
         self.cluster.rmpool(self.datapoolname, self.pool_profile)
         self.cluster.rmpool(self.metadatapoolname, self.pool_profile)
         self.cluster.mkpool(self.datapoolname, self.pool_profile)
         self.cluster.mkpool(self.metadatapoolname, self.pool_profile)
-	stdout, self.adminkeyerror = common.pdsh(settings.getnodes('head'), 'ceph-authtool /tmp/cbt/ceph/keyring -p').communicate()
-        # for now not using authentication
-	#self.adminkey = stdout.split(':')[1]
-	#self.adminkey = self.adminkey.strip()
+	stdout, self.adminkeyerror = common.pdsh(settings.getnodes('head'), 'ceph-authtool %s -p -n client.admin' % self.cluster.keyring_fn).communicate()
+        # authentication setup
+        # assume output has a single key
+        self.adminkey = stdout.split(':')[1]
+	self.adminkey = self.adminkey.strip()
+        print 'stdout=', stdout, ' adminkey=', self.adminkey
 	stdout, stderr = common.pdsh(settings.getnodes('head'), 'ceph fs new testfs %s %s' % (self.metadatapoolname, self.datapoolname)).communicate()
         print stdout, stderr
 
         common.pdsh(settings.getnodes('clients'), 'sudo mkdir -p -m0755 -- %s/cbt-kernelcephfsfio-`hostname -s`' % self.cluster.mnt_dir).communicate()
-        # for now not using authentication
-        # common.pdsh(settings.getnodes('clients'), 'sudo mount -t ceph %s %s/cbt-kernelcephfsfio-`hostname -s` -o name=admin,secret=%s' % (self.monaddr_mountpoint, self.cluster.mnt_dir, self.adminkey)).communicate()
-        stdout, stderr = common.pdsh(settings.getnodes('clients'), 'sudo mount -t ceph %s %s/cbt-kernelcephfsfio-`hostname -s` ' % (self.monaddr_mountpoint, self.cluster.mnt_dir)).communicate()
-        print stdout, stderr
+        # authentication (should this be conditional?)
+        if True:
+            mountopts = '-o name=admin,secret=%s' % self.adminkey
+        else:
+            mountopts = ' '
+
+        print 'mount cmd will be', 'sudo mount -t ceph %s %s/cbt-kernelcephfsfio-`hostname -s` %s' % (self.monaddr_mountpoint, self.cluster.mnt_dir, mountopts)
+
+        stdout, stderr = common.pdsh(settings.getnodes('clients'), 'sudo mount -t ceph %s %s/cbt-kernelcephfsfio-`hostname -s` %s' % (self.monaddr_mountpoint, self.cluster.mnt_dir, mountopts)).communicate()
+        print 'mount output = ', stdout, stderr
 
     def recovery_callback(self): 
         common.pdsh(settings.getnodes('clients'), 'sudo killall -9 fio').communicate()
