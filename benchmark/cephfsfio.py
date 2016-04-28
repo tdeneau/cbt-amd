@@ -42,6 +42,7 @@ class CephFsFio(Benchmark):
         self.client_ra = config.get('client_ra', 128)
         self.datapoolname = "cbt-kernelcephfsfiodata"
         self.metadatapoolname = "cbt-kernelcephfsfiometadata"
+        self.use_fuse = config.get('use_fuse', False)
 
         self.run_dir = '%s/cephfsfio/osd_ra-%08d/client_ra-%08d/op_size-%08d/concurrent_procs-%03d/iodepth-%03d/%s' % (self.run_dir, int(self.osd_ra), int(self.client_ra), int(self.op_size), int(self.concurrent_procs), int(self.iodepth), self.mode)
         self.out_dir = '%s/cephfsfio/osd_ra-%08d/client_ra-%08d/op_size-%08d/concurrent_procs-%03d/iodepth-%03d/%s' % (self.archive_dir, int(self.osd_ra), int(self.client_ra), int(self.op_size), int(self.concurrent_procs), int(self.iodepth), self.mode)
@@ -162,7 +163,7 @@ class CephFsFio(Benchmark):
     def mkimages_internal(self):
         #  as a testing hack, if the ceph fs testfs already exists, skip this stuff
 	stdout, stderr = common.pdsh(settings.getnodes('head'), 'ceph fs ls').communicate()
-        if stdout.find('name: testfs,') > -1:
+        if stdout.find('name: testfs,') > -1 or stdout.find('name: newfs,') > -1:
             logger.info('Using existing ceph fs testfs')
             return
         self.cluster.rmpool(self.datapoolname, self.pool_profile)
@@ -179,16 +180,22 @@ class CephFsFio(Benchmark):
         print stdout, stderr
 
         common.pdsh(settings.getnodes('clients'), 'sudo mkdir -p -m0755 -- %s/cbt-kernelcephfsfio-`hostname -s`' % self.cluster.mnt_dir).communicate()
-        # authentication (should this be conditional?)
-        if True:
-            mountopts = '-o name=admin,secret=%s' % self.adminkey
+
+        if not self.use_fuse:
+            # authentication for mount command
+            if True:
+                mountopts = '-o name=admin,secret=%s' % self.adminkey
+            else:
+                mountopts = ' '
+            print 'mount cmd will be', 'sudo mount -t ceph %s %s/cbt-kernelcephfsfio-`hostname -s` %s' % (self.monaddr_mountpoint, self.cluster.mnt_dir, mountopts)
+            stdout, stderr = common.pdsh(settings.getnodes('clients'), 'sudo mount -t ceph %s %s/cbt-kernelcephfsfio-`hostname -s` %s' % (self.monaddr_mountpoint, self.cluster.mnt_dir, mountopts)).communicate()
+            print 'mount output = ', stdout, stderr
         else:
-            mountopts = ' '
+            #use_fuse = true
+            # I guess we don't need authentication options here?
+            stdout, stderr = common.pdsh(settings.getnodes('clients'), 'sudo ceph-fuse -m %s %s/cbt-kernelcephfsfio-`hostname -s`' % (self.monaddr_mountpoint, self.cluster.mnt_dir)).communicate()
+            print 'mount output = ', stdout, stderr
 
-        print 'mount cmd will be', 'sudo mount -t ceph %s %s/cbt-kernelcephfsfio-`hostname -s` %s' % (self.monaddr_mountpoint, self.cluster.mnt_dir, mountopts)
-
-        stdout, stderr = common.pdsh(settings.getnodes('clients'), 'sudo mount -t ceph %s %s/cbt-kernelcephfsfio-`hostname -s` %s' % (self.monaddr_mountpoint, self.cluster.mnt_dir, mountopts)).communicate()
-        print 'mount output = ', stdout, stderr
 
     def recovery_callback(self): 
         common.pdsh(settings.getnodes('clients'), 'sudo killall -9 fio').communicate()

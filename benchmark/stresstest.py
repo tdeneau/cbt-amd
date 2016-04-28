@@ -80,7 +80,8 @@ class stressloop(object):
         self.cluster.mkpool(poolname, self.pool_profile)
 
     def makeRemoteCmd(self, localCmd):
-        remoteCmd = '%s/%s' % (self.tmpCbt, localCmd)
+        # remote just uses the basename in the tmpCbt directory
+        remoteCmd = '%s/%s' % (self.tmpCbt, os.path.basename(localCmd))
         common.pdcp(settings.getnodes('clients'), '', localCmd, remoteCmd)
         return remoteCmd
 
@@ -195,6 +196,7 @@ class cephfsloop(stressloop, cephfsfio.CephFsFio):
         self.monaddr_mountpoint = testcfg.get('monaddr_mountpoint', None)
         self.datapoolname = "cbt-kernelcephfsfiodata"
         self.metadatapoolname = "cbt-kernelcephfsfiometadata"
+        self.use_fuse = testcfg.get('use_fuse', False)
         
     def initialize(self):
         self.buildTestTree()  # need test data for source
