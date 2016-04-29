@@ -154,7 +154,27 @@ class Cosbench(Benchmark):
 
     def initialize(self):
         super(Cosbench, self).initialize()
+        conf = self.config
 
+        # set up cosbench binary directory onto client machines if not already there
+        if not os.path.exists(conf["cosbench_dir"]):
+            logger.info('creating cosbench directory %s...' % conf["cosbench_dir"])
+            ftpImagePath = 'ftp://dogmatix/pub/ceph/cosbench/cosbench-0.4.2.c3.zip'        
+            common.pdsh(settings.getnodes('clients'), 'wget -q %s -O %s' % (ftpImagePath, '/tmp')).communicate()
+            common.pdsh(settings.getnodes('clients'), 'rm -rf %s' % conf["cosbench_dir"]).communicate()
+            common.pdsh(settings.getnodes('clients'), 'unzip -q -d /tmp /tmp/cosbench-0.4.2.c3.zip').communicate()
+        else:
+            logger.info('cosbench directory %s already exists, reusing...' % conf["cosbench_dir"])
+
+        # see if the controller is running and start if not
+        stdout,stderr= common.pdsh(settings.getnodes('clients'), 'bash -c "netstat -anp | grep LISTEN | grep 19088"').communicate()
+        if '19088' in stdout:
+            logger.info('cosbench controller already running...')
+        else:
+            # start the controller and driver
+            stdout,stderr= common.pdsh(settings.getnodes('clients'), 'bash -c "cd %s; bash start-all.sh"' % conf["cosbench_dir"]).communicate()
+            logger.info('Output from start-all.sh...\n %s %s' % (stdout, stderr))
+            
         logger.debug('Running cosbench and radosgw check.')
         self.prerun_check()
 
@@ -165,7 +185,7 @@ class Cosbench(Benchmark):
 
         logger.debug('Pausing for 60s for idle monitoring.')
         monitoring.start("%s/idle_monitoring" % self.run_dir)
-        time.sleep(60)
+        time.sleep(1)
         monitoring.stop()
 
         common.sync_files('%s' % self.run_dir, self.out_dir)
@@ -210,6 +230,7 @@ class Cosbench(Benchmark):
         self.add_leaf_to_tree(leaves, parent)
         self.config["xml_name"] = leaves["name"]
         tree = ET.ElementTree(root)
+        common.mkdir_p(conf["cosbench_xml_dir"])
         tree.write("%s/%s.xml" % (conf["cosbench_xml_dir"], leaves["name"]),pretty_print=True)
         logger.info("Write xml conf to %s/%s.xml", conf["cosbench_xml_dir"], leaves["name"])
 
