@@ -30,6 +30,8 @@ class Cosbench(Benchmark):
         self.user = settings.cluster.get('user')
         self.rgw = settings.cluster.get('rgws')[0]
         self.use_existing = settings.cluster.get('use_existing')
+        self.hash_check = config.get('hash_check', False)
+        self.hash_check = str(self.hash_check)
 
         self.run_dir = '%s/osd_ra-%08d/op_size-%s/concurrent_procs-%03d/containers-%05d/objects-%05d/%s' % (self.run_dir, int(self.osd_ra), self.op_size, int(self.total_procs), int(self.containers),int(self.objects), self.mode)
         self.out_dir = '%s/osd_ra-%08d/op_size-%s/concurrent_procs-%03d/containers-%05d/objects-%05d/%s' % (self.archive_dir, int(self.osd_ra), self.op_size, int(self.total_procs),  int(self.containers),int(self.objects), self.mode)
@@ -110,7 +112,8 @@ class Cosbench(Benchmark):
                 "config":"containers=%s;objects=%s;cprefix=%s-%s-%s;sizes=c(%s)%s"
                 %(conf["containers"], conf["objects"], conf["obj_size"], conf["mode"], conf["objects_max"], conf["obj_size_num"], conf["obj_size_unit"]),
                 "ratio":ratio[tmp_mode],
-                "type":tmp_mode
+                "type":tmp_mode,
+                "hashCheck":self.hash_check
             })
 
         template = {
@@ -210,7 +213,8 @@ class Cosbench(Benchmark):
                     "type":"prepare",
                     "workers":conf["workers"],
                     "config":"containers=r(1,%s);objects=r(1,%s);cprefix=%s-%s-%s;sizes=c(%s)%s" %
-                    (conf["containers_max"], conf["objects_max"], conf["obj_size"], conf["mode"], conf["objects_max"], conf["obj_size_num"], conf["obj_size_unit"])
+                    (conf["containers_max"], conf["objects_max"], conf["obj_size"], conf["mode"], conf["objects_max"], conf["obj_size_num"], conf["obj_size_unit"]),
+                    "hashCheck":self.hash_check
                 }
             }
             self.config["workload"]["workflow"]["workstage"].insert(0, workstage_prepare)
