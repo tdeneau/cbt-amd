@@ -109,11 +109,10 @@ class Cosbench(Benchmark):
         operation = []
         for tmp_mode in mode:
             operation.append({
-                "config":"containers=%s;objects=%s;cprefix=%s-%s-%s;sizes=c(%s)%s"
-                %(conf["containers"], conf["objects"], conf["obj_size"], conf["mode"], conf["objects_max"], conf["obj_size_num"], conf["obj_size_unit"]),
+                "config":"containers=%s;objects=%s;cprefix=%s-%s-%s;sizes=c(%s)%s;hashCheck=%s"
+                %(conf["containers"], conf["objects"], conf["obj_size"], conf["mode"], conf["objects_max"], conf["obj_size_num"], conf["obj_size_unit"], self.hash_check),
                 "ratio":ratio[tmp_mode],
                 "type":tmp_mode,
-                "hashCheck":self.hash_check
             })
 
         template = {
@@ -162,10 +161,11 @@ class Cosbench(Benchmark):
         # set up cosbench binary directory onto client machines if not already there
         if not os.path.exists(conf["cosbench_dir"]):
             logger.info('creating cosbench directory %s...' % conf["cosbench_dir"])
-            ftpImagePath = 'ftp://dogmatix/pub/ceph/cosbench/cosbench-0.4.2.c3.zip'        
-            common.pdsh(settings.getnodes('clients'), 'wget -q %s -O %s' % (ftpImagePath, '/tmp')).communicate()
+            ftpZipPath = 'ftp://dogmatix/pub/ceph/cosbench/cosbench-0.4.2.c3.zip'        
+            tmpZipPath = '/tmp/' + os.path.basename(ftpZipPath)
+            common.pdsh(settings.getnodes('clients'), 'wget -q %s -O %s' % (ftpZipPath, tmpZipPath)).communicate()
             common.pdsh(settings.getnodes('clients'), 'rm -rf %s' % conf["cosbench_dir"]).communicate()
-            common.pdsh(settings.getnodes('clients'), 'unzip -q -d /tmp /tmp/cosbench-0.4.2.c3.zip').communicate()
+            common.pdsh(settings.getnodes('clients'), 'unzip -q -d /tmp %s' % tmpZipPath).communicate()
         else:
             logger.info('cosbench directory %s already exists, reusing...' % conf["cosbench_dir"])
 
@@ -212,9 +212,8 @@ class Cosbench(Benchmark):
                 "work": {
                     "type":"prepare",
                     "workers":conf["workers"],
-                    "config":"containers=r(1,%s);objects=r(1,%s);cprefix=%s-%s-%s;sizes=c(%s)%s" %
-                    (conf["containers_max"], conf["objects_max"], conf["obj_size"], conf["mode"], conf["objects_max"], conf["obj_size_num"], conf["obj_size_unit"]),
-                    "hashCheck":self.hash_check
+                    "config":"containers=r(1,%s);objects=r(1,%s);cprefix=%s-%s-%s;sizes=c(%s)%s;hashCheck=%s" %
+                    (conf["containers_max"], conf["objects_max"], conf["obj_size"], conf["mode"], conf["objects_max"], conf["obj_size_num"], conf["obj_size_unit"], self.hash_check),
                 }
             }
             self.config["workload"]["workflow"]["workstage"].insert(0, workstage_prepare)
