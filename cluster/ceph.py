@@ -330,7 +330,7 @@ class Ceph(Cluster):
             if user:
                 mdshost = '%s@%s' % (user, mdshost)
             for mds, addr in mdss.iteritems():
-                pidfile="%s/%s.pid" % (self.pid_dir, mdshost)
+                pidfile="%s/%s-mds.pid" % (self.pid_dir, mdshost)
                 cmd = 'sudo sh -c "ulimit -n 16384 && ulimit -c unlimited && exec %s -c %s -i %s --keyring=%s --pid-file=%s"' % (self.ceph_mds_cmd, self.tmp_conf, mds, self.keyring_fn, pidfile)
                 if self.mds_valgrind:
                     cmd = "%s %s" % (common.setup_valgrind(self.mds_valgrind, 'mds.%s' % mdshost, self.tmp_dir), cmd)

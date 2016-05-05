@@ -178,6 +178,8 @@ class CephFsFio(Benchmark):
         print 'stdout=', stdout, ' adminkey=', self.adminkey
 	stdout, stderr = common.pdsh(settings.getnodes('head'), 'ceph fs new testfs %s %s' % (self.metadatapoolname, self.datapoolname)).communicate()
         print stdout, stderr
+        logger.info('Pausing to let mds settle after ceph fs creation')
+        time.sleep(5)
 
         common.pdsh(settings.getnodes('clients'), 'sudo mkdir -p -m0755 -- %s/cbt-kernelcephfsfio-`hostname -s`' % self.cluster.mnt_dir).communicate()
 
