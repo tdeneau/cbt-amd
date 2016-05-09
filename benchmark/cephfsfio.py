@@ -179,8 +179,9 @@ class CephFsFio(Benchmark):
 	stdout, stderr = common.pdsh(settings.getnodes('head'), 'ceph fs new testfs %s %s' % (self.metadatapoolname, self.datapoolname)).communicate()
         print stdout, stderr
         logger.info('Pausing to let mds settle after ceph fs creation')
-        time.sleep(5)
+        time.sleep(8)
 
+        common.pdsh(settings.getnodes('clients'), 'sudo rm -rf %s/cbt-kernelcephfsfio-`hostname -s`' % self.cluster.mnt_dir).communicate()
         common.pdsh(settings.getnodes('clients'), 'sudo mkdir -p -m0755 -- %s/cbt-kernelcephfsfio-`hostname -s`' % self.cluster.mnt_dir).communicate()
 
         if not self.use_fuse:
@@ -189,14 +190,17 @@ class CephFsFio(Benchmark):
                 mountopts = '-o name=admin,secret=%s' % self.adminkey
             else:
                 mountopts = ' '
-            print 'mount cmd will be', 'sudo mount -t ceph %s %s/cbt-kernelcephfsfio-`hostname -s` %s' % (self.monaddr_mountpoint, self.cluster.mnt_dir, mountopts)
-            stdout, stderr = common.pdsh(settings.getnodes('clients'), 'sudo mount -t ceph %s %s/cbt-kernelcephfsfio-`hostname -s` %s' % (self.monaddr_mountpoint, self.cluster.mnt_dir, mountopts)).communicate()
-            print 'mount output = ', stdout, stderr
+            mountcmd = 'sudo mount.ceph %s %s/cbt-kernelcephfsfio-`hostname -s` %s' % (self.monaddr_mountpoint, self.cluster.mnt_dir, mountopts)
         else:
             #use_fuse = true
             # I guess we don't need authentication options here?
-            stdout, stderr = common.pdsh(settings.getnodes('clients'), 'sudo ceph-fuse -m %s %s/cbt-kernelcephfsfio-`hostname -s`' % (self.monaddr_mountpoint, self.cluster.mnt_dir)).communicate()
-            print 'mount output = ', stdout, stderr
+            mountcmd = 'sudo ceph-fuse -m %s %s/cbt-kernelcephfsfio-`hostname -s`' % (self.monaddr_mountpoint, self.cluster.mnt_dir)
+
+        stdout, stderr = common.pdsh(settings.getnodes('clients'), mountcmd).communicate()
+        print 'mount output stdout=', stdout, '\nstderr=', stderr
+        if (stderr != ''):
+            logger.info('Error mounting CephFS')
+            sys.exit()
 
 
     def recovery_callback(self): 
