@@ -85,6 +85,10 @@ class stressloop(object):
         common.pdcp(settings.getnodes('clients'), '', localCmd, remoteCmd)
         return remoteCmd
 
+    def pdshClientsShowOutput(self, cmd):
+        stdout, stderr = common.pdsh(settings.getnodes('clients'), cmd).communicate()
+        print 'stdout=', stdout, '\nstderr=', stderr
+        
 
 class s3loop(stressloop):
     def __init__(self, testcfg, stressTestObj):
@@ -166,28 +170,29 @@ class rbdloop(stressloop):
             pset.append(p)
         return pset
 
-
     def mkRbdImages(self):
         # first unmount, unmap and rm image if it is already there
         logger.info ('unmapping and unmounting rbd images')
-        common.pdsh(settings.getnodes('clients'), 'sudo umount /dev/rbd/%s/%s-`hostname -s`' % (self.poolname, self.poolname)).communicate()
-        common.pdsh(settings.getnodes('clients'), 'sudo rbd -p %s unmap /dev/rbd/%s/%s-`hostname -s`' % (self.poolname, self.poolname, self.poolname)).communicate()
-        common.pdsh(settings.getnodes('clients'), 'sudo rbd -p %s rm %s-`hostname -s`' % (self.poolname, self.poolname)).communicate()
+        self.pdshClientsShowOutput('sudo umount /dev/rbd/%s/%s-`hostname -s`' % (self.poolname, self.poolname))
+        self.pdshClientsShowOutput('sudo rbd -p %s unmap /dev/rbd/%s/%s-`hostname -s`' % (self.poolname, self.poolname, self.poolname))
+        self.pdshClientsShowOutput('sudo rbd -p %s rm %s-`hostname -s`' % (self.poolname, self.poolname))
 
         # rebuild the pool
         self.rebuildPool()
 
         # now create, map and mount the new img
         logger.info ('creating mapping and mounting rbd image')
-        common.pdsh(settings.getnodes('clients'), 'sudo rbd create %s-`hostname -s` --size %s --pool %s' % (self.poolname, self.vol_size, self.poolname)).communicate()
-        common.pdsh(settings.getnodes('clients'), 'sudo rbd map %s-`hostname -s` --pool %s --id admin' % (self.poolname, self.poolname)).communicate()
-        common.pdsh(settings.getnodes('clients'), 'sudo mkfs.xfs /dev/rbd/%s/%s-`hostname -s`' % (self.poolname, self.poolname)).communicate()
+        self.pdshClientsShowOutput('sudo rbd create %s-`hostname -s` --size %s --pool %s' % (self.poolname, self.vol_size, self.poolname))
+        self.pdshClientsShowOutput('sudo rbd map %s-`hostname -s` --pool %s --id admin' % (self.poolname, self.poolname))
+        self.pdshClientsShowOutput('sudo mkfs.xfs /dev/rbd/%s/%s-`hostname -s`' % (self.poolname, self.poolname))
         common.pdsh(settings.getnodes('clients'), 'sudo mkdir -p -m0755 -- %s/%s-`hostname -s`' % (self.cluster.mnt_dir, self.poolname)).communicate()
-        common.pdsh(settings.getnodes('clients'), 'sudo mount -t xfs -o noatime,inode64 /dev/rbd/%s/%s-`hostname -s` %s/%s-`hostname -s`' % (self.poolname, self.poolname, self.cluster.mnt_dir, self.poolname)).communicate()
+        self.pdshClientsShowOutput('sudo mount -t xfs -o noatime,inode64 /dev/rbd/%s/%s-`hostname -s` %s/%s-`hostname -s`' % (self.poolname, self.poolname, self.cluster.mnt_dir, self.poolname))
         # print status
         stdout,stderr = common.pdsh(settings.getnodes('clients'), 'rbd showmapped').communicate()
         logger.info ('\n%s %s' % (stdout, stderr))
-
+        if not stdout:
+            logger.info('rbd showmapped error')
+            sys.exit()
 
 #cephfsloop inherits from cephfsfio just to get the fs mkimages_internal stuff
 class cephfsloop(stressloop, cephfsfio.CephFsFio):
