@@ -37,7 +37,7 @@ class CephTestRados(Benchmark):
 
 
         self.weights = {'read': 100, 'write':100, 'delete':10}
-        for weight in ['snap_create', 'snap_remove', 'rollback', 'setattr', 'rmattr', 'watch', 'copy_from', 'hit_set_list', 'is_dirty', 'cache_flush', 'cache_try_flush', 'cache_evict' 'append', 'write', 'read', 'delete']:
+        for weight in ['snap_create', 'snap_remove', 'rollback', 'setattr', 'rmattr', 'watch', 'copy_from', 'hit_set_list', 'is_dirty', 'cache_flush', 'cache_try_flush', 'cache_evict', 'append', 'write', 'read', 'delete']:
             self.addweight(weight)
         if 'write_append_excl' in self.bools and 'append' in self.weights:
             self.weights['append'] = self.weights['write'] / 2

@@ -104,11 +104,13 @@ class s3loop(stressloop):
         stdout, stderr = common.pdsh(head, 'radosgw-admin metadata list user').communicate()
         if not re.compile('"s3user"', re.MULTILINE).findall(stdout):
             common.pdsh(head, 'radosgw-admin user create --display-name=s3user --uid=s3user --access-key=abc --secret=123')
+            # saw cases where we needed a pause here
+            logger.info('Pausing after user creation')
+            time.sleep(10) 
 
     def run(self, id, run_dir):
         outfile = '%s/stress-s3loop-%d.out ' % (run_dir, id)
         remoteS3LoopCmd = self.makeRemoteCmd('../%s' % self.s3LoopCmd)
-        # saw cases where we needed a pause here
         time.sleep(2) 
         pset = []
         for clientnode in self.stressTestObj.cluster.config.get('clients', []):
@@ -182,7 +184,9 @@ class rbdloop(stressloop):
 
         # now create, map and mount the new img
         logger.info ('creating mapping and mounting rbd image')
-        self.pdshClientsShowOutput('sudo rbd create %s-`hostname -s` --size %s --pool %s' % (self.poolname, self.vol_size, self.poolname))
+        # ok to use image format 1 here, since we are not snapshotting, cloning, etc.
+        # in some SuSE SES 3.0 releases there was a bug with image format 2
+        self.pdshClientsShowOutput('sudo rbd create %s-`hostname -s` --image-format 1 --size %s --pool %s' % (self.poolname, self.vol_size, self.poolname))
         self.pdshClientsShowOutput('sudo rbd map %s-`hostname -s` --pool %s --id admin' % (self.poolname, self.poolname))
         self.pdshClientsShowOutput('sudo mkfs.xfs /dev/rbd/%s/%s-`hostname -s`' % (self.poolname, self.poolname))
         common.pdsh(settings.getnodes('clients'), 'sudo mkdir -p -m0755 -- %s/%s-`hostname -s`' % (self.cluster.mnt_dir, self.poolname)).communicate()
