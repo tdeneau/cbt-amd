@@ -187,9 +187,10 @@ class rbdloop(stressloop):
 
         # now create, map and mount the new img
         logger.info ('creating mapping and mounting rbd image')
-        # ok to use image format 1 here, since we are not snapshotting, cloning, etc.
-        # in some SuSE SES 3.0 releases there was a bug with image format 2
-        self.pdshClientsShowOutput('sudo rbd create %s-`hostname -s` --image-format 1 --size %s --pool %s' % (self.poolname, self.vol_size, self.poolname))
+        # create image using default image-format (2) and default other features
+        # (ceph.conf should specify rbd default features = 1)
+        # this is required to be able to map with the RBD kernel driver.
+        self.pdshClientsShowOutput('sudo rbd create %s-`hostname -s` --size %s --pool %s' % (self.poolname, self.vol_size, self.poolname))
         self.pdshClientsShowOutput('sudo rbd map %s-`hostname -s` --pool %s --id admin' % (self.poolname, self.poolname))
         self.pdshClientsShowOutput('sudo mkfs.xfs /dev/rbd/%s/%s-`hostname -s`' % (self.poolname, self.poolname))
         common.pdsh(settings.getnodes('clients'), 'sudo mkdir -p -m0755 -- %s/%s-`hostname -s`' % (self.cluster.mnt_dir, self.poolname)).communicate()
