@@ -117,6 +117,8 @@ class Ceph(Cluster):
         self.stoprequest = threading.Event()
         self.haltrequest = threading.Event()
 
+        self.rgw_buckets_pool_profile = config.get('rgw_buckets_pool_profile', 'default')
+
 
     def initialize(self): 
         # safety check to make sure we don't blow away an existing cluster!
@@ -166,6 +168,9 @@ class Ceph(Cluster):
 
         # Make the crush and erasure profiles
         self.make_profiles()
+
+        # make .rgw.buckets if rgw being used
+        self.make_rgw_buckets_pool()
 
         # Peform Idle Monitoring
         if self.idle_duration > 0:
@@ -395,6 +400,7 @@ class Ceph(Cluster):
     def start_rgw(self):
         common.pdsh(settings.getnodes('head'), 'ceph-authtool %s --gen-key --name=client.radosgw.gateway  --cap osd \'allow rwx\'  --cap mon \'allow rwx\'' % (self.keyring_fn) ).communicate()
         common.pdsh(settings.getnodes('head'), 'ceph -k %s auth add client.radosgw.gateway  -i %s' % (self.keyring_fn, self.keyring_fn) ).communicate()
+
         rgwhosts = settings.cluster.get('rgws', [])
 
         for host in rgwhosts:
@@ -409,6 +415,11 @@ class Ceph(Cluster):
                 cmd = '%s %s' % (self.ceph_run_cmd, cmd)
 
             common.pdsh(pdshhost, 'sudo sh -c "ulimit -n 16384 && ulimit -c unlimited && exec %s"' % cmd).communicate()
+
+    def make_rgw_buckets_pool(self):
+        rgwhosts = settings.cluster.get('rgws', [])
+        if len(rgwhosts) > 0:
+            self.mkpool('.rgw.buckets', self.rgw_buckets_pool_profile)
 
 
     def disable_scrub(self):
