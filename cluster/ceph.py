@@ -523,7 +523,6 @@ class Ceph(Cluster):
             step = 'host' if totalCopies <= osdNodeCount else 'osd'
             plugin = profile.get('plugin', 'jerasure')
             technique = profile.get('technique', 'reed_sol_van')
-            # we are assuming that totalCopies is less than totalOsds but maybe we should check that
 	    common.pdsh(settings.getnodes('head'), '%s -c %s osd erasure-code-profile set %s ruleset-failure-domain=%s k=%s m=%s plugin=%s technique=%s' % (self.ceph_cmd, self.tmp_conf, name, step, k, m, plugin, technique)).communicate()
             self.set_ruleset(name)
 
