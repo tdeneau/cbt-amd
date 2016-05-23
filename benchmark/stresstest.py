@@ -54,7 +54,7 @@ class stressloop(object):
         self.tmpCbt = '/tmp/cbt'
         self.testTreeDir = '/tmp/test-tree'
         self.fsLoopCmd = 'fs-loop.sh'
-        self.populateCmd = 'populate.sh'
+        self.populateCmd = 'populate.py'
         logger.info('%s cfg = %s' % (self.__class__.__name__, testcfg))
 
 
@@ -62,7 +62,7 @@ class stressloop(object):
         remotePopulateCmd = self.makeRemoteCmd('./%s' % self.populateCmd)
         # saw cases where we needed a pause here
         time.sleep(2) 
-        stdout, stderr = common.pdsh(settings.getnodes('clients'), 'bash %s %s' % (remotePopulateCmd, self.testTreeDir)).communicate()
+        stdout, stderr = common.pdsh(settings.getnodes('clients'), 'python %s %s' % (remotePopulateCmd, self.testTreeDir)).communicate()
         logger.info ('\n%s %s' % (stdout, stderr))
 
     def initialize(self):
