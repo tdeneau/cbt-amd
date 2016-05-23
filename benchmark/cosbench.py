@@ -252,6 +252,12 @@ class Cosbench(Benchmark):
         super(Cosbench, self).run()
         self.dropcaches()
         self.cluster.dump_config(self.run_dir)
+
+        # Run the backfill testing thread if requested
+        if 'recovery_test' in self.cluster.config:
+            recovery_callback = self.recovery_callback
+            self.cluster.create_recovery_test(self.run_dir, recovery_callback)
+
         monitoring.start(self.run_dir)
 
         # Run cosbench test
@@ -319,6 +325,10 @@ class Cosbench(Benchmark):
         logger.info("wait %d secs to finish the test", wait_time)
         logger.info("You can monitor the runtime status and results on http://localhost:19088/controller")
         time.sleep(wait_time)
+
+    def recovery_callback(self): 
+        pass
+        # todo: figure out how to stop things if this ever gets called
 
     def __str__(self):
         return "%s\n%s\n%s" % (self.run_dir, self.out_dir, super(Cosbench, self).__str__())
