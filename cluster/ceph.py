@@ -414,7 +414,19 @@ class Ceph(Cluster):
             else:
                 cmd = '%s %s' % (self.ceph_run_cmd, cmd)
 
-            common.pdsh(pdshhost, 'sudo sh -c "ulimit -n 16384 && ulimit -c unlimited && exec %s"' % cmd).communicate()
+            logger.info('Pausing before starting radosgw daemons')
+            time.sleep(5)
+            ps = common.pdsh(pdshhost, 'sudo sh -c "ulimit -n 16384 && ulimit -c unlimited && exec %s &"' % cmd)
+            logger.info('Pausing after starting radosgw daemons')
+            if False:
+                ps.communicate()
+            else:
+                time.sleep(5)
+                ps.poll()
+                if ps.returncode == None:
+                    logger.info('radosgw startup still running, continuing anyway')
+                else:
+                    logger.info('radosgw return code is %d' & ps.returncode)
 
     def make_rgw_buckets_pool(self):
         rgwhosts = settings.cluster.get('rgws', [])
