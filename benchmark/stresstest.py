@@ -154,6 +154,7 @@ class rbdloop(stressloop):
         self.poolname = 'cbt-rbd-stress'
         self.vol_size = testcfg.get('vol_size', 65536)
         self.rbdLoopCmd = 'rbd-loop.sh'
+        self.vol_order = testcfg.get('vol_order', 22)
 
 
     def initialize(self):
