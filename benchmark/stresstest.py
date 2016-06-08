@@ -55,14 +55,23 @@ class stressloop(object):
         self.testTreeDir = '/tmp/test-tree'
         self.fsLoopCmd = 'fs-loop.sh'
         self.populateCmd = 'populate.py'
+        # if a client list is specified for this particular stresstest, use that
+        # otherwise, use the client list specified in the main CBT section
+        self.clientList = testcfg.get('clients', self.stressTestObj.cluster.config.get('clients', []))
+        self.clientNodes = self.getUserNodes(self.clientList)
         logger.info('%s cfg = %s' % (self.__class__.__name__, testcfg))
+
+    def getUserNodes(self, clientList):
+        str_nodes = ','.join(settings.uniquenodes(clientList))
+        logger.debug("Nodes : %s", str_nodes)
+        return str_nodes
 
 
     def buildTestTree(self):
         remotePopulateCmd = self.makeRemoteCmd('./%s' % self.populateCmd)
         # saw cases where we needed a pause here
         time.sleep(2) 
-        stdout, stderr = common.pdsh(settings.getnodes('clients'), 'python %s %s' % (remotePopulateCmd, self.testTreeDir)).communicate()
+        stdout, stderr = common.pdsh(self.clientNodes, 'python %s %s' % (remotePopulateCmd, self.testTreeDir)).communicate()
         logger.info ('\n%s %s' % (stdout, stderr))
 
     def initialize(self):
@@ -82,11 +91,11 @@ class stressloop(object):
     def makeRemoteCmd(self, localCmd):
         # remote just uses the basename in the tmpCbt directory
         remoteCmd = '%s/%s' % (self.tmpCbt, os.path.basename(localCmd))
-        common.pdcp(settings.getnodes('clients'), '', localCmd, remoteCmd)
+        common.pdcp(self.clientNodes, '', localCmd, remoteCmd)
         return remoteCmd
 
     def pdshClientsShowOutput(self, cmd):
-        stdout, stderr = common.pdsh(settings.getnodes('clients'), cmd).communicate()
+        stdout, stderr = common.pdsh(self.clientNodes, cmd).communicate()
         print 'stdout=', stdout, '\nstderr=', stderr
         
 
@@ -99,6 +108,9 @@ class s3loop(stressloop):
 
     def initialize(self):
         self.buildTestTree()  # need test data for srcdir
+        # install s3cmd
+        common.pdsh(self.clientNodes, 'easy_install s3cmd').communicate()
+
         # create the s3user if it does not already exist
         head = settings.getnodes('head')
         stdout, stderr = common.pdsh(head, 'radosgw-admin metadata list user').communicate()
@@ -116,7 +128,7 @@ class s3loop(stressloop):
         remoteS3LoopCmd = self.makeRemoteCmd('../%s' % self.s3LoopCmd)
         time.sleep(2) 
         pset = []
-        for clientnode in self.stressTestObj.cluster.config.get('clients', []):
+        for clientnode in self.clientList:
             print 'spawn on client ', clientnode
             cmdargs = ['ssh', clientnode, 'bash', remoteS3LoopCmd, '%s:%s' % (self.gw_host, self.gw_port), self.testTreeDir, str(id), '2>&1|tee', outfile]
             p = common.popen(cmdargs)
@@ -140,7 +152,7 @@ class radosloop(stressloop):
         # saw cases where we needed a pause here
         time.sleep(2) 
         pset = []
-        for clientnode in self.stressTestObj.cluster.config.get('clients', []):
+        for clientnode in self.clientList:
             print 'spawn on client ', clientnode
             cmdargs = ['ssh', clientnode, 'bash', remoteRadosLoopCmd, self.poolname, self.testTreeDir, str(id), str(self.threads), '2>&1|tee', outfile]
             p = common.popen(cmdargs)
@@ -168,7 +180,7 @@ class rbdloop(stressloop):
         # saw cases where we needed a pause here
         time.sleep(2) 
         pset = []
-        for clientnode in self.stressTestObj.cluster.config.get('clients', []):
+        for clientnode in self.clientList:
             print 'spawn on client ', clientnode
             cmdargs = ['ssh', clientnode, 'bash', remoteFsLoopCmd, '%s/%s-`hostname -s`' % (self.cluster.mnt_dir, self.poolname),
                        self.testTreeDir, str(id), 'rbd', '1', '2>&1|tee', outfile]
@@ -194,10 +206,10 @@ class rbdloop(stressloop):
         self.pdshClientsShowOutput('sudo rbd create %s-`hostname -s` --size %s --pool %s --order %s' % (self.poolname, self.vol_size, self.poolname, self.vol_order))
         self.pdshClientsShowOutput('sudo rbd map %s-`hostname -s` --pool %s --id admin' % (self.poolname, self.poolname))
         self.pdshClientsShowOutput('sudo mkfs.xfs /dev/rbd/%s/%s-`hostname -s`' % (self.poolname, self.poolname))
-        common.pdsh(settings.getnodes('clients'), 'sudo mkdir -p -m0755 -- %s/%s-`hostname -s`' % (self.cluster.mnt_dir, self.poolname)).communicate()
+        common.pdsh(self.clientNodes, 'sudo mkdir -p -m0755 -- %s/%s-`hostname -s`' % (self.cluster.mnt_dir, self.poolname)).communicate()
         self.pdshClientsShowOutput('sudo mount -t xfs -o noatime,inode64 /dev/rbd/%s/%s-`hostname -s` %s/%s-`hostname -s`' % (self.poolname, self.poolname, self.cluster.mnt_dir, self.poolname))
         # print status
-        stdout,stderr = common.pdsh(settings.getnodes('clients'), 'rbd showmapped').communicate()
+        stdout,stderr = common.pdsh(self.clientNodes, 'rbd showmapped').communicate()
         logger.info ('\n%s %s' % (stdout, stderr))
         if not stdout:
             logger.info('rbd showmapped error')
@@ -215,7 +227,7 @@ class cephfsloop(stressloop, cephfsfio.CephFsFio):
     def initialize(self):
         self.buildTestTree()  # need test data for source
         # create cephfs mapping
-        self.mkimages_internal()
+        self.mkimages_internal(self.clientNodes)
 
     def run(self, id, run_dir):
         outfile = '%s/stress-cephfsloop-%d.out ' % (run_dir, id)
@@ -223,7 +235,7 @@ class cephfsloop(stressloop, cephfsfio.CephFsFio):
         # saw cases where we needed a pause here
         time.sleep(2) 
         pset = []
-        for clientnode in self.stressTestObj.cluster.config.get('clients', []):
+        for clientnode in self.clientList:
             print 'spawn on client ', clientnode
             cmdargs = ['ssh', clientnode, 'bash', remoteFsLoopCmd, '%s/cbt-kernelcephfsfio-`hostname -s`' % (self.cluster.mnt_dir), self.testTreeDir, str(id), 'cephfs', '2>&1|tee', outfile]
             p = common.popen(cmdargs)
@@ -268,8 +280,8 @@ class kvmrbdloop(stressloop):
         logger.info ('Creating %d VMs on each client, this may take a while' % self.vms_per_client)
         myReaders = []
         pset = []
-        for clientnode in self.stressTestObj.cluster.config.get('clients', []):
-            cmdargs = ['ssh', clientnode, 'python', remoteCreateVmScript, createVmScriptFlags, '2>&1']
+        for clientnode in self.clientList:
+            cmdargs = ['ssh', clientnode, 'python', '-u', remoteCreateVmScript, createVmScriptFlags, '2>&1']
             p = common.popen(cmdargs)
             pset.append(p)
             myReaders.append(getReaderForProc(p))
@@ -290,7 +302,7 @@ class kvmrbdloop(stressloop):
         # saw cases where we needed a pause here
         time.sleep(2) 
         pset = []
-        for clientnode in self.stressTestObj.cluster.config.get('clients', []):
+        for clientnode in self.clientList:
             logger.info('spawn loop-on-vms.sh on client %s' % clientnode)
             cmdargs = ['ssh', clientnode, 'bash', self.remoteRunOnVmsCmd, '2>&1|tee', outfile]
             proc = common.popen(cmdargs)

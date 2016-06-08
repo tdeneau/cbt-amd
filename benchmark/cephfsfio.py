@@ -156,11 +156,12 @@ class CephFsFio(Benchmark):
 
     def mkimages(self):
         monitoring.start("%s/pool_monitoring" % self.run_dir)
-        self.mkimages_internal()
+        # call mkimages_internal passing the standard settings for client nodes
+        self.mkimages_internal(settings.getnodes('clients'))
         monitoring.stop()
 
     # this can be called from other classes
-    def mkimages_internal(self):
+    def mkimages_internal(self, clientNodes):
         #  as a testing hack, if the ceph fs testfs already exists, skip this stuff
 	stdout, stderr = common.pdsh(settings.getnodes('head'), 'ceph fs ls').communicate()
         if stdout.find('name: testfs,') > -1 or stdout.find('name: newfs,') > -1:
@@ -181,8 +182,8 @@ class CephFsFio(Benchmark):
         logger.info('Pausing to let mds settle after ceph fs creation')
         time.sleep(8)
 
-        common.pdsh(settings.getnodes('clients'), 'sudo rm -rf %s/cbt-kernelcephfsfio-`hostname -s`' % self.cluster.mnt_dir).communicate()
-        common.pdsh(settings.getnodes('clients'), 'sudo mkdir -p -m0755 -- %s/cbt-kernelcephfsfio-`hostname -s`' % self.cluster.mnt_dir).communicate()
+        common.pdsh(self.clientNodes, 'sudo rm -rf %s/cbt-kernelcephfsfio-`hostname -s`' % self.cluster.mnt_dir).communicate()
+        common.pdsh(self.clientNodes, 'sudo mkdir -p -m0755 -- %s/cbt-kernelcephfsfio-`hostname -s`' % self.cluster.mnt_dir).communicate()
 
         if not self.use_fuse:
             # authentication for mount command
@@ -196,7 +197,7 @@ class CephFsFio(Benchmark):
             # I guess we don't need authentication options here?
             mountcmd = 'sudo ceph-fuse -m %s %s/cbt-kernelcephfsfio-`hostname -s`' % (self.monaddr_mountpoint, self.cluster.mnt_dir)
 
-        stdout, stderr = common.pdsh(settings.getnodes('clients'), mountcmd).communicate()
+        stdout, stderr = common.pdsh(self.clientNodes, mountcmd).communicate()
         print 'mount output stdout=', stdout, '\nstderr=', stderr
         if (stderr != ''):
             logger.info('Error mounting CephFS')

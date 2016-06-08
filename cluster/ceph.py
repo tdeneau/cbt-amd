@@ -263,7 +263,7 @@ class Ceph(Cluster):
         common.pdsh(settings.getnodes('head'), 'ceph-authtool --create-keyring --gen-key --name=mon. %s --cap mon \'allow *\'' % self.keyring_fn).communicate()
         common.pdsh(settings.getnodes('head'), 'ceph-authtool --gen-key --name=client.admin --set-uid=0 --cap mon \'allow *\' --cap osd \'allow *\' --cap mds \'allow *\' %s' % self.keyring_fn).communicate()
         common.rscp(settings.getnodes('head'), self.keyring_fn, '%s.tmp' % self.keyring_fn).communicate()
-        common.pdcp(settings.getnodes('mons', 'osds', 'rgws', 'mds'), '', '%s.tmp' % self.keyring_fn, self.keyring_fn).communicate()
+        common.pdcp(settings.getnodes('mons', 'osds', 'rgws', 'mds', 'clients'), '', '%s.tmp' % self.keyring_fn, self.keyring_fn).communicate()
 
         # Build the monmap, retrieve it, and distribute it
         mons = settings.getnodes('mons').split(',')
@@ -400,6 +400,9 @@ class Ceph(Cluster):
     def start_rgw(self):
         common.pdsh(settings.getnodes('head'), 'ceph-authtool %s --gen-key --name=client.radosgw.gateway  --cap osd \'allow rwx\'  --cap mon \'allow rwx\'' % (self.keyring_fn) ).communicate()
         common.pdsh(settings.getnodes('head'), 'ceph -k %s auth add client.radosgw.gateway  -i %s' % (self.keyring_fn, self.keyring_fn) ).communicate()
+        # distribute to the other nodes
+        common.rscp(settings.getnodes('head'), self.keyring_fn, '%s.tmp' % self.keyring_fn).communicate()
+        common.pdcp(settings.getnodes('mons', 'osds', 'rgws', 'mds'), '', '%s.tmp' % self.keyring_fn, self.keyring_fn).communicate()
 
         rgwhosts = settings.cluster.get('rgws', [])
 
@@ -426,7 +429,7 @@ class Ceph(Cluster):
                 if ps.returncode == None:
                     logger.info('radosgw startup still running, continuing anyway')
                 else:
-                    logger.info('radosgw return code is %d' & ps.returncode)
+                    logger.info('radosgw return code is %d' % (ps.returncode))
 
     def make_rgw_buckets_pool(self):
         rgwhosts = settings.cluster.get('rgws', [])
