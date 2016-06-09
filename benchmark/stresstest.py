@@ -50,6 +50,8 @@ class stressloop(object):
     def __init__(self, testcfg, stressTestObj):
         self.stressTestObj = stressTestObj
         self.cluster = stressTestObj.cluster
+        self.testcfg = testcfg
+        self.copies = testcfg.get('copies', 0)
         self.pool_profile = testcfg.get('pool_profile', 'default')
         self.tmpCbt = '/tmp/cbt'
         self.testTreeDir = '/tmp/test-tree'
@@ -182,7 +184,7 @@ class rbdloop(stressloop):
         pset = []
         for clientnode in self.clientList:
             print 'spawn on client ', clientnode
-            cmdargs = ['ssh', clientnode, 'bash', remoteFsLoopCmd, '%s/%s-`hostname -s`' % (self.cluster.mnt_dir, self.poolname),
+            cmdargs = ['ssh', clientnode, 'bash', '-x', remoteFsLoopCmd, '%s/%s-`hostname -s`' % (self.cluster.mnt_dir, self.poolname),
                        self.testTreeDir, str(id), 'rbd', '1', '2>&1|tee', outfile]
             p = common.popen(cmdargs)
             pset.append(p)
@@ -349,20 +351,8 @@ class StressTest(Benchmark):
         # clear out the run_dir
         common.pdsh(settings.getnodes('clients'), 'rm -rf %s/*' % self.run_dir)
 
-        # Run the backfill testing thread if requested
-        if 'recovery_test' in self.cluster.config:
-            logger.info('calling create_recovery_test')
-            recovery_callback = self.recovery_callback
-            self.cluster.create_recovery_test(self.run_dir, recovery_callback)
-        return True
-
-
-    def run(self):
-        global ps, original_sigint
-        common.make_remote_dir(self.run_dir)
-        logger.info('config is %s' % (self.config))
-        
-        ps = []
+        # create the needed testobjs
+        self.testobjs = dict()
         tests = self.config.get('tests')
         logger.info('tests is %s' % (tests))
         for tname in tests.keys():
@@ -380,18 +370,41 @@ class StressTest(Benchmark):
                 sys.exit()
                 
             testobj = cls(testcfg, self)
-            logger.info ('%s running %s, %d copies' % (testobj, tname, tcount))
+            self.testobjs[tname] = testobj
+            logger.info ('%s initializing %s, %d copies' % (testobj, tname, tcount))
             # do any required initialization of this testobj
             testobj.initialize()
 
-            for i in xrange(tcount):
+
+        # Run the backfill testing thread if requested
+        if 'recovery_test' in self.cluster.config:
+            logger.info('calling create_recovery_test')
+            recovery_callback = self.recovery_callback
+            self.cluster.create_recovery_test(self.run_dir, recovery_callback)
+        return True
+
+
+    def run(self):
+        global ps, original_sigint
+        common.make_remote_dir(self.run_dir)
+        logger.info('config is %s' % (self.config))
+
+        ps = []
+        for tname in self.testobjs.keys():
+            # retrieve the testobj that was created earlier
+            testobj = self.testobjs[tname]
+            tcopies = testobj.copies
+            
+            logger.info ('%s running %s, %d copies' % (testobj, tname, tcopies))
+
+            for i in xrange(tcopies):
                 logger.info ('%s, copy #%d' % (tname, i))
                 p = testobj.run(i, self.run_dir)
                 if p:
                     ps += p
                     print 'ps is now', ps
 
-        # end of for tname in tests.keys():
+        # end of for tname in self.testobjs.keys():
 
         # set up SIGINT to kill the subprocesses
         # store the original SIGINT handler
