@@ -434,7 +434,12 @@ class Ceph(Cluster):
     def make_rgw_buckets_pool(self):
         rgwhosts = settings.cluster.get('rgws', [])
         if len(rgwhosts) > 0:
-            self.mkpool('.rgw.buckets', self.rgw_buckets_pool_profile)
+            stdout, stderr = common.pdsh(settings.getnodes('head'), 'rados lspools').communicate()
+            if re.compile('default.rgw.log', re.MULTILINE).findall(stdout):
+                rgw_buckets_poolname = 'default.rgw.buckets.data'
+            else:
+                rgw_buckets_poolname = '.rgw.buckets'
+            self.mkpool(rgw_buckets_poolname, self.rgw_buckets_pool_profile)
 
 
     def disable_scrub(self):

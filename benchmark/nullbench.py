@@ -32,6 +32,10 @@ class Nullbench(Benchmark):
 
     def run(self):
         super(Nullbench, self).run()
+
+        # remake the run directory which got cleaned by the super.run
+        common.make_remote_dir(self.run_dir)
+
         if 'recovery_test' in self.cluster.config:
             logger.info('Nullbench waiting for recovery_test to finish')
             while not self.recoveryFinished:
