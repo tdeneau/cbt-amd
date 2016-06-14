@@ -1,16 +1,28 @@
 import common
 import settings
 
+# place to save latest monitoring sar_raw_file based on directory
+# passed in to monintoring.start (since we don't have objects here)
+lastestSarDir = ''
+sarRawData = 'sar_raw_data'
+sarInterval = 2
 
 def start(directory):
+    monDirectory = directory
     nodes = settings.getnodes('clients', 'osds', 'mons', 'rgws')
     collectl_dir = '%s/collectl' % directory
-    # perf_dir = '%s/perf' % directory
-    # blktrace_dir = '%s/blktrace' % directory
+    perf_dir = '%s/perf' % directory
+    blktrace_dir = '%s/blktrace' % directory
+    global latestSarDir
+    latestSarDir = sar_dir = '%s/sar' % directory
+
+    # sar
+    common.pdsh(nodes, 'mkdir -p -m0755 -- %s' % latestSarDir).communicate()
+    common.pdsh(nodes, 'sar -o %s/%s %d' % (latestSarDir, sarRawData, sarInterval))
 
     # collectl
-    common.pdsh(nodes, 'mkdir -p -m0755 -- %s' % collectl_dir)
-    common.pdsh(nodes, 'collectl -s+CDJNYZ -o 2cu --utc --plot --rawtoo -i 1:10 -F0 -f %s' % collectl_dir)
+    # common.pdsh(nodes, 'mkdir -p -m0755 -- %s' % collectl_dir).communicate()
+    # common.pdsh(nodes, 'collectl -s+CDJNYZ -o 2cu --utc --plot --rawtoo -i 1:10 -F0 -f %s' % collectl_dir)
 
     # perf
     # common.pdsh(nodes), 'mkdir -p -m0755 -- %s' % perf_dir).communicate()
@@ -29,6 +41,14 @@ def stop(directory=None):
     common.pdsh(nodes, 'pkill -SIGINT -f collectl').communicate()
     common.pdsh(nodes, 'sudo pkill -SIGINT -f perf_3.6').communicate()
     common.pdsh(settings.getnodes('osds'), 'sudo pkill -SIGINT -f blktrace').communicate()
+
+    # sar output handling
+    common.pdsh(nodes, 'pkill -SIGINT -f sar').communicate()
+    sarRawInput = '%s/%s' % (latestSarDir, sarRawData)
+    sarOutput = '%s/sar.out' % (latestSarDir)
+    common.pdsh(nodes, "sudo sar -u -d -p -n DEV -f %s | egrep -v -e '[[:space:]]*sd.[[:space:]]' - >%s" % (sarRawInput, sarOutput)).communicate()
+    # common.pdsh(nodes, "rm -f %s" % (sarRawInput))
+
     if directory:
         sc = settings.cluster
         common.pdsh(nodes, 'cd %s/perf;sudo chown %s.%s perf.data' % (directory, sc.get('user'), sc.get('user')))

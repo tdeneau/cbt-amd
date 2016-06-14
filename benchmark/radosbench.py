@@ -58,14 +58,15 @@ class Radosbench(Benchmark):
         monitoring.start("%s/scrub_monitoring" % self.run_dir)
         self.cluster.check_scrub()
         monitoring.stop()
-        
-        logger.info('Pausing for 60s for idle monitoring.')
-        monitoring.start("%s/idle_monitoring" % self.run_dir)
-        time.sleep(60)
-        monitoring.stop()
-            
-        common.sync_files('%s/*' % self.run_dir, self.out_dir)
 
+        # set back during development (originally 60)
+        pauseSecs = 6
+        logger.info('Pausing for %ds for idle monitoring.' % pauseSecs)
+        monitoring.start("%s/idle_monitoring" % self.run_dir)
+        time.sleep(pauseSecs)
+        monitoring.stop()
+    
+        common.sync_files('%s/*' % self.run_dir, self.out_dir)
         return True
 
     def run(self):
