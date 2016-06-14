@@ -38,6 +38,10 @@ class Benchmark(object):
             self.cluster.initialize()
 
         self.cleanup()
+
+        # clean up any existing run directory before creating new one
+        logger.debug('Cleaning existing temporary run directory: %s', self.run_dir)
+        common.pdsh(settings.getnodes('clients', 'osds', 'mons', 'rgws'), 'sudo rm -rf %s' % self.run_dir).communicate()
         # Create the run directory
         common.make_remote_dir(self.run_dir)
 
