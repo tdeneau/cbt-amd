@@ -45,9 +45,7 @@ def stop(directory=None):
     # sar output handling
     common.pdsh(nodes, 'pkill -SIGINT -f sar').communicate()
     sarRawInput = '%s/%s' % (latestSarDir, sarRawData)
-    sarOutput = '%s/sar.out' % (latestSarDir)
-    common.pdsh(nodes, "sudo sar -u -d -p -n DEV -f %s | egrep -v -e '[[:space:]]*sd.[[:space:]]' - >%s" % (sarRawInput, sarOutput)).communicate()
-    # common.pdsh(nodes, "rm -f %s" % (sarRawInput))
+    common.pdsh(nodes, "sudo gzip %s" % sarRawInput).communicate()
 
     if directory:
         sc = settings.cluster
