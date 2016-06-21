@@ -184,6 +184,7 @@ class CephFsFio(Benchmark):
 
         common.pdsh(self.clientNodes, 'sudo rm -rf %s/cbt-kernelcephfsfio-`hostname -s`' % self.cluster.mnt_dir).communicate()
         common.pdsh(self.clientNodes, 'sudo mkdir -p -m0755 -- %s/cbt-kernelcephfsfio-`hostname -s`' % self.cluster.mnt_dir).communicate()
+        common.pdsh(self.clientNodes, 'modprobe ceph').communicate()
 
         if not self.use_fuse:
             # authentication for mount command
@@ -191,7 +192,7 @@ class CephFsFio(Benchmark):
                 mountopts = '-o name=admin,secret=%s' % self.adminkey
             else:
                 mountopts = ' '
-            mountcmd = 'sudo mount.ceph %s %s/cbt-kernelcephfsfio-`hostname -s` %s' % (self.monaddr_mountpoint, self.cluster.mnt_dir, mountopts)
+            mountcmd = 'sudo mount -t ceph %s %s/cbt-kernelcephfsfio-`hostname -s` %s' % (self.monaddr_mountpoint, self.cluster.mnt_dir, mountopts)
         else:
             #use_fuse = true
             # I guess we don't need authentication options here?

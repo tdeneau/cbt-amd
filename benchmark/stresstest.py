@@ -93,7 +93,7 @@ class stressloop(object):
     def makeRemoteCmd(self, localCmd):
         # remote just uses the basename in the tmpCbt directory
         remoteCmd = '%s/%s' % (self.tmpCbt, os.path.basename(localCmd))
-        common.pdcp(self.clientNodes, '', localCmd, remoteCmd)
+        common.pdcp(self.clientNodes, '', localCmd, remoteCmd).communicate()
         return remoteCmd
 
     def pdshClientsShowOutput(self, cmd):
