@@ -3,7 +3,7 @@ import settings
 
 # place to save latest monitoring sar_raw_file based on directory
 # passed in to monintoring.start (since we don't have objects here)
-lastestSarDir = ''
+latestSarDir = ''
 sarRawData = 'sar_raw_data'
 sarInterval = 2
 

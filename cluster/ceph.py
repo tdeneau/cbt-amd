@@ -7,6 +7,7 @@ import time
 import uuid
 import threading
 import logging
+import re
 
 from cluster import Cluster
 
