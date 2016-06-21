@@ -184,7 +184,7 @@ class rbdloop(stressloop):
         pset = []
         for clientnode in self.clientList:
             print 'spawn on client ', clientnode
-            cmdargs = ['ssh', clientnode, 'bash', '-x', remoteFsLoopCmd, '%s/%s-`hostname -s`' % (self.cluster.mnt_dir, self.poolname),
+            cmdargs = ['ssh', clientnode, 'bash', remoteFsLoopCmd, '%s/%s-`hostname -s`' % (self.cluster.mnt_dir, self.poolname),
                        self.testTreeDir, str(id), 'rbd', '1', '2>&1|tee', outfile]
             p = common.popen(cmdargs)
             pset.append(p)

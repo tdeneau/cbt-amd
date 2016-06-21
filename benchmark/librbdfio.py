@@ -129,7 +129,7 @@ class LibrbdFio(Benchmark):
         rbdname = 'cbt-librbdfio-`hostname -s`-%d' % volnum
         out_file = '%s/output.%d' % (self.run_dir, volnum)
 
-        fio_cmd = 'sudo %s --ioengine=rbd --clientname=admin --pool=%s --rbdname=%s --invalidate=0' % (self.cmd_path_full, self.poolname, rbdname)
+        fio_cmd = 'sudo %s --ioengine=rbd --output-format=json --clientname=admin --pool=%s --rbdname=%s --invalidate=0' % (self.cmd_path_full, self.poolname, rbdname)
         fio_cmd += ' --rw=%s' % self.mode
         if (self.mode == 'readwrite' or self.mode == 'randrw'):
             fio_cmd += ' --rwmixread=%s --rwmixwrite=%s' % (self.rwmixread, self.rwmixwrite)
@@ -158,7 +158,7 @@ class LibrbdFio(Benchmark):
             fio_cmd += ' --rate_iops=%s' % self.rate_iops
 
         # End the fio_cmd
-        fio_cmd += ' %s > %s' % (self.names, out_file)
+        fio_cmd += ' %s > %s 2>%s.err' % (self.names, out_file, out_file)
         return fio_cmd
 
     def mkimages(self):
