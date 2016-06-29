@@ -34,6 +34,7 @@ class KvmRbdFio(Benchmark):
         self.rbdadd_options = config.get('rbdadd_options')
         self.client_ra = config.get('client_ra', '128')
         self.fio_cmd = config.get('fio_cmd', '/usr/bin/fio')
+        self.vdletter = config.get('vdletter', 'b')
 
         # FIXME there are too many permutations, need to put results in SQLITE3 
         self.run_dir = '%s/osd_ra-%08d/client_ra-%08d/op_size-%08d/concurrent_procs-%03d/iodepth-%03d/%s' % (self.run_dir, int(self.osd_ra), int(self.client_ra), int(self.op_size), int(self.total_procs), int(self.iodepth), self.mode)
@@ -52,10 +53,12 @@ class KvmRbdFio(Benchmark):
 
     def initialize(self): 
         super(KvmRbdFio, self).initialize()
-        for i in xrange(1):
-             letter = string.ascii_lowercase[i+1]
+        i = 0
+        common.pdsh(settings.getnodes('clients'), 'sudo mkdir /srv/rbdfio-`hostname -s`-%d' % i).communicate()
+        # if vdletter is not a, need to mkfs, and mount
+        if (self.vdletter != 'a'):
+             letter = self.vdletter
              common.pdsh(settings.getnodes('clients'), 'sudo mkfs.ext4 /dev/vd%s' % letter).communicate()
-             common.pdsh(settings.getnodes('clients'), 'sudo mkdir /srv/rbdfio-`hostname -s`-%d' % i).communicate()
              common.pdsh(settings.getnodes('clients'), 'sudo mount -t ext4 -o noatime /dev/vd%s /srv/rbdfio-`hostname -s`-%d' %(letter, i)).communicate()
 
         # Create the run directory
@@ -85,6 +88,7 @@ class KvmRbdFio(Benchmark):
         out_file = '%s/output' % self.run_dir
 #        pre_cmd = 'sudo fio --rw=write -ioengine=sync --numjobs=%s --bs=4M --size %dM %s > /dev/null' % (self.numjobs, self.vol_size, self.names)
         fio_cmd = 'sudo %s' % self.fio_cmd
+        fio_cmd += ' --output-format=json'
         fio_cmd += ' --rw=%s' % self.mode
         if (self.mode == 'readwrite' or self.mode == 'randrw'):
             fio_cmd += ' --rwmixread=%s --rwmixwrite=%s' % (self.rwmixread, self.rwmixwrite)
@@ -116,7 +120,9 @@ class KvmRbdFio(Benchmark):
 
     def cleanup(self):
          super(KvmRbdFio, self).cleanup()
-         common.pdsh(settings.getnodes('clients'), 'sudo umount /srv/*').communicate()
+         common.pdsh(settings.getnodes('clients'), 'rm -rf /srv/*').communicate()
+         if self.vdletter != 'a':
+             common.pdsh(settings.getnodes('clients'), 'sudo umount /srv/*').communicate()
 
     def set_client_param(self, param, value):
          cmd = 'find /sys/block/vd* ! -iname vda -exec sudo sh -c "echo %s > {}/queue/%s" \;' % (value, param)

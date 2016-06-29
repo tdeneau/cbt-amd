@@ -103,6 +103,7 @@ class RbdFio(Benchmark):
         time.sleep(5)
         out_file = '%s/output' % self.run_dir
         fio_cmd = 'sudo %s' % (self.cmd_path_full)
+        fio_cmd += ' --output-format=json'
         fio_cmd += ' --rw=%s' % self.mode
         if (self.mode == 'readwrite' or self.mode == 'randrw'):
             fio_cmd += ' --rwmixread=%s --rwmixwrite=%s' % (self.rwmixread, self.rwmixwrite)
