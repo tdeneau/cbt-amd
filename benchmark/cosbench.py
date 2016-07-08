@@ -185,7 +185,7 @@ class Cosbench(Benchmark):
         monitoring.start("%s/scrub_monitoring" % self.run_dir)
         self.cluster.check_scrub()
         monitoring.stop()
-
+        
         logger.debug('Pausing for 60s for idle monitoring.')
         monitoring.start("%s/idle_monitoring" % self.run_dir)
         time.sleep(1)
@@ -193,6 +193,8 @@ class Cosbench(Benchmark):
 
         common.sync_files('%s' % self.run_dir, self.out_dir)
 
+
+    def pre_run_initialize(self): 
         # Create the run directory
         common.make_remote_dir(self.run_dir)
 
@@ -259,6 +261,10 @@ class Cosbench(Benchmark):
             self.cluster.create_recovery_test(self.run_dir, recovery_callback)
 
         monitoring.start(self.run_dir)
+
+        logger.debug('Running cosbench and radosgw check.')
+        self.prerun_check()
+        self.pre_run_initialize()
 
         # Run cosbench test
         try:
