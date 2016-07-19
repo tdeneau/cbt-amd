@@ -166,22 +166,22 @@ class CephFsFio(Benchmark):
 	stdout, stderr = common.pdsh(settings.getnodes('head'), 'ceph fs ls').communicate()
         if stdout.find('name: testfs,') > -1 or stdout.find('name: newfs,') > -1:
             logger.info('Using existing ceph fs testfs')
-            return
-        self.cluster.rmpool(self.datapoolname, self.pool_profile)
-        self.cluster.rmpool(self.metadatapoolname, self.pool_profile)
-        self.cluster.mkpool(self.datapoolname, self.pool_profile)
-        self.cluster.mkpool(self.metadatapoolname, self.pool_profile)
-	stdout, self.adminkeyerror = common.pdsh(settings.getnodes('head'), 'ceph-authtool %s -p -n client.admin' % self.cluster.keyring_fn).communicate()
+        else:
+            self.cluster.rmpool(self.datapoolname, self.pool_profile)
+            self.cluster.rmpool(self.metadatapoolname, self.pool_profile)
+            self.cluster.mkpool(self.datapoolname, self.pool_profile)
+            self.cluster.mkpool(self.metadatapoolname, self.pool_profile)
+            stdout, stderr = common.pdsh(settings.getnodes('head'), 'ceph fs new testfs %s %s' % (self.metadatapoolname, self.datapoolname)).communicate()
+            print stdout, stderr
+            logger.info('Pausing to let mds settle after ceph fs creation')
+            time.sleep(8)
+
+        stdout, self.adminkeyerror = common.pdsh(settings.getnodes('head'), 'ceph-authtool %s -p -n client.admin' % self.cluster.keyring_fn).communicate()
         # authentication setup
         # assume output has a single key
         self.adminkey = stdout.split(':')[1]
-	self.adminkey = self.adminkey.strip()
+        self.adminkey = self.adminkey.strip()
         print 'stdout=', stdout, ' adminkey=', self.adminkey
-	stdout, stderr = common.pdsh(settings.getnodes('head'), 'ceph fs new testfs %s %s' % (self.metadatapoolname, self.datapoolname)).communicate()
-        print stdout, stderr
-        logger.info('Pausing to let mds settle after ceph fs creation')
-        time.sleep(8)
-
         common.pdsh(self.clientNodes, 'sudo rm -rf %s/cbt-kernelcephfsfio-`hostname -s`' % self.cluster.mnt_dir).communicate()
         common.pdsh(self.clientNodes, 'sudo mkdir -p -m0755 -- %s/cbt-kernelcephfsfio-`hostname -s`' % self.cluster.mnt_dir).communicate()
         common.pdsh(self.clientNodes, 'modprobe ceph').communicate()
