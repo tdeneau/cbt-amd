@@ -132,7 +132,7 @@ class s3loop(stressloop):
         pset = []
         for clientnode in self.clientList:
             print 'spawn on client ', clientnode
-            cmdargs = ['ssh', clientnode, 'bash', remoteS3LoopCmd, '%s:%s' % (self.gw_host, self.gw_port), self.testTreeDir, str(id), '2>&1|tee', outfile]
+            cmdargs = ['ssh', clientnode, 'bash', '-x', remoteS3LoopCmd, '%s:%s' % (self.gw_host, self.gw_port), self.testTreeDir, str(id), '2>&1|tee', outfile]
             p = common.popen(cmdargs)
             pset.append(p)
         return pset
