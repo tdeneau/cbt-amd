@@ -182,9 +182,9 @@ class CephFsFio(Benchmark):
         self.adminkey = stdout.split(':')[1]
         self.adminkey = self.adminkey.strip()
         print 'stdout=', stdout, ' adminkey=', self.adminkey
-        common.pdsh(self.clientNodes, 'sudo rm -rf %s/cbt-kernelcephfsfio-`hostname -s`' % self.cluster.mnt_dir).communicate()
-        common.pdsh(self.clientNodes, 'sudo mkdir -p -m0755 -- %s/cbt-kernelcephfsfio-`hostname -s`' % self.cluster.mnt_dir).communicate()
-        common.pdsh(self.clientNodes, 'modprobe ceph').communicate()
+        common.pdsh(clientNodes, 'sudo rm -rf %s/cbt-kernelcephfsfio-`hostname -s`' % self.cluster.mnt_dir).communicate()
+        common.pdsh(clientNodes, 'sudo mkdir -p -m0755 -- %s/cbt-kernelcephfsfio-`hostname -s`' % self.cluster.mnt_dir).communicate()
+        common.pdsh(clientNodes, 'modprobe ceph').communicate()
 
         if not self.use_fuse:
             # authentication for mount command
@@ -198,7 +198,7 @@ class CephFsFio(Benchmark):
             # I guess we don't need authentication options here?
             mountcmd = 'sudo ceph-fuse -m %s %s/cbt-kernelcephfsfio-`hostname -s`' % (self.monaddr_mountpoint, self.cluster.mnt_dir)
 
-        stdout, stderr = common.pdsh(self.clientNodes, mountcmd).communicate()
+        stdout, stderr = common.pdsh(clientNodes, mountcmd).communicate()
         print 'mount output stdout=', stdout, '\nstderr=', stderr
         if (stderr != ''):
             logger.info('Error mounting CephFS')
